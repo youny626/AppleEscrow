@@ -6,20 +6,11 @@
 //
 
 import SwiftUI
-import Contacts
 
 @main
 struct EscrowAppApp: App {
     
     init() {
-        let contactStore = CNContactStore()
-        contactStore.requestAccess(for: .contacts) { granted, error in
-            if granted {
-                print("Contacts permission granted")
-            } else {
-                print("Contacts permission denied: \(error.debugDescription)")
-            }
-        }
         
         // Run the heavy work off the main thread
         DispatchQueue.global(qos: .userInitiated).async {

@@ -7,6 +7,7 @@
 
 import Foundation
 import SQLite3
+import Contacts
 
 public enum SQLValue {
     case text(String)
@@ -27,6 +28,15 @@ public final class Escrow {
     private init() {
         guard sqlite3_open(":memory:", &db) == SQLITE_OK else {
             fatalError("Could not open SQLite")
+        }
+        
+        let contactStore = CNContactStore()
+        contactStore.requestAccess(for: .contacts) { granted, error in
+            if granted {
+                print("Contacts permission granted")
+            } else {
+                print("Contacts permission denied: \(error.debugDescription)")
+            }
         }
         
         register_contacts_module(db)
