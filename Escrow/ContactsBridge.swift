@@ -8,42 +8,47 @@
 import Foundation
 import Contacts
 
-// Swift-side row cache
-var cachedContacts: [(String, String, String)] = []
-
-// Bridging function called from contacts_vtab.c
+/// Swift callback invoked by contacts_vtab.c
+///
+/// - Parameters:
+///   * filterPrefix  : optional LIKE-prefix (unused for now)
+///   * rowIndex      : zero-based row number requested by SQLite
+///   * outFirst, outLast, outPhone : C strings you must allocate (`strdup`)
+///
+/// - Returns: 0  (SQLite ignores the numeric value)
 @_cdecl("contacts_vtab_query")
 func contacts_vtab_query(_ filterPrefix: UnsafePointer<CChar>?,
-                         _ rowIndex: Int32,
-                         _ outFirst: UnsafeMutablePointer<UnsafePointer<CChar>?>!,
-                         _ outLast:  UnsafeMutablePointer<UnsafePointer<CChar>?>!,
-                         _ outPhone: UnsafeMutablePointer<UnsafePointer<CChar>?>!) -> Int32 {
+                         _ rowIndex:    Int32,
+                         _ outFirst:    UnsafeMutablePointer<UnsafePointer<CChar>?>!,
+                         _ outLast:     UnsafeMutablePointer<UnsafePointer<CChar>?>!,
+                         _ outPhone:    UnsafeMutablePointer<UnsafePointer<CChar>?>!) -> Int32
+{
+    // 1. Pull a fresh snapshot from CNContactStore
+    let store   = CNContactStore()
+    let keys    = [CNContactGivenNameKey,
+                   CNContactFamilyNameKey,
+                   CNContactPhoneNumbersKey] as [CNKeyDescriptor]
+    let request = CNContactFetchRequest(keysToFetch: keys)
 
-    // Prime cache on first call
-    if cachedContacts.isEmpty {
-        let store   = CNContactStore()
-        let keys    = [CNContactGivenNameKey,
-                       CNContactFamilyNameKey,
-                       CNContactPhoneNumbersKey] as [CNKeyDescriptor]
-        let request = CNContactFetchRequest(keysToFetch: keys)
-        try? store.enumerateContacts(with: request) { c, _ in
-            let phones = c.phoneNumbers
+    var targetFirst = "", targetLast = "", targetPhone = ""
+    var current = 0
+
+    try? store.enumerateContacts(with: request) { contact, stop in
+        if current == rowIndex {
+            targetFirst = contact.givenName
+            targetLast  = contact.familyName
+            targetPhone = contact.phoneNumbers
                            .map { $0.value.stringValue }
                            .joined(separator: ", ")
-            cachedContacts.append((c.givenName, c.familyName, phones))
+            stop.pointee = true          // we found our row, abort early
         }
+        current += 1
     }
 
-    // Bounds check
-    guard rowIndex < cachedContacts.count else {
-        outFirst.pointee = nil; outLast.pointee = nil; outPhone.pointee = nil
-        return 0
-    }
+    // 2. Populate outputs (empty strings if index ≥ count)
+    outFirst.pointee = UnsafePointer(strdup(targetFirst))
+    outLast .pointee = UnsafePointer(strdup(targetLast))
+    outPhone.pointee = UnsafePointer(strdup(targetPhone))
 
-    // Return row values
-    let (fn, ln, ph) = cachedContacts[Int(rowIndex)]
-    outFirst.pointee = UnsafePointer(strdup(fn))
-    outLast .pointee = UnsafePointer(strdup(ln))
-    outPhone.pointee = UnsafePointer(strdup(ph))
     return 0
 }

@@ -22,13 +22,15 @@ public typealias Row = [String: SQLValue]
 
 public final class Escrow {
     public static let shared = Escrow()
-    private let db: OpaquePointer!
+    private var db: OpaquePointer?
 
     private init() {
-        var tmp: OpaquePointer?
-        guard sqlite3_open(":memory:", &tmp) == SQLITE_OK else { fatalError() }
-        db = tmp
+        guard sqlite3_open(":memory:", &db) == SQLITE_OK else {
+            fatalError("Could not open SQLite")
+        }
+        
         register_contacts_module(db)
+        
         sqlite3_exec(db,
           "CREATE VIRTUAL TABLE Contacts USING contacts_module;",
           nil,nil,nil)
