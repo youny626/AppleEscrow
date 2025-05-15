@@ -44,8 +44,12 @@ func contacts_vtab_prepare(_ firstPrefixC: UnsafePointer<CChar>?,
                            _ colMask:      UInt,
                            _ outHandle:    UnsafeMutablePointer<ContactsHandlePtr?>!,
                            _ outRowCount:  UnsafeMutablePointer<Int32>!) -> Int32 {
-    let firstPrefix = firstPrefixC.flatMap { String(cString: $0) }
-    let lastPrefix  = lastPrefixC.flatMap  { String(cString: $0) }
+    var firstPrefix = firstPrefixC.flatMap { String(cString: $0) }
+    var lastPrefix  = lastPrefixC.flatMap { String(cString: $0) }
+
+    // Handle SQL LIKE 'foo%' → Swift prefix
+    if let fp = firstPrefix, fp.hasSuffix("%") { firstPrefix = String(fp.dropLast()) }
+    if let lp = lastPrefix,  lp.hasSuffix("%") { lastPrefix  = String(lp.dropLast()) }
 
     // Build keysToFetch based on projection
     var keys: [CNKeyDescriptor] = []

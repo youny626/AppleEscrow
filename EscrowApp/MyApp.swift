@@ -15,6 +15,8 @@ struct EscrowAppApp: App {
         // Run the heavy work off the main thread
         DispatchQueue.global(qos: .userInitiated).async {
             let rowCount = Escrow.shared.run(
+                // "SELECT firstName, lastName, phoneNumbers FROM Contacts LIMIT 5"
+                // "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName = 'Yue'"
                 access: "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE lastName LIKE 'G%' AND firstName = 'Yue'"
             ) { rows in
                 rows.forEach { row in
