@@ -5,9 +5,9 @@
 //  Created by Zhiru Zhu on 5/8/25.
 //
 
+import Contacts
 import Foundation
 import SQLite3
-import Contacts
 
 public enum SQLValue {
     case text(String)
@@ -29,7 +29,7 @@ public final class Escrow {
         guard sqlite3_open(":memory:", &db) == SQLITE_OK else {
             fatalError("Could not open SQLite")
         }
-        
+
         let contactStore = CNContactStore()
         contactStore.requestAccess(for: .contacts) { granted, error in
             if granted {
@@ -38,12 +38,16 @@ public final class Escrow {
                 print("Contacts permission denied: \(error.debugDescription)")
             }
         }
-        
+
         register_contacts_module(db)
-        
-        sqlite3_exec(db,
-          "CREATE VIRTUAL TABLE Contacts USING contacts_module;",
-          nil,nil,nil)
+
+        sqlite3_exec(
+            db,
+            "CREATE VIRTUAL TABLE Contacts USING contacts_module;",
+            nil,
+            nil,
+            nil
+        )
     }
 
     public func run<T>(access sql: String, compute: ([Row]) -> T) -> T {
@@ -54,7 +58,7 @@ public final class Escrow {
         var rows: [Row] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
             var row: Row = [:]
-            for i in 0 ..< sqlite3_column_count(stmt) {
+            for i in 0..<sqlite3_column_count(stmt) {
                 let colName = String(cString: sqlite3_column_name(stmt, i))
                 switch sqlite3_column_type(stmt, i) {
                 case SQLITE_INTEGER:
@@ -62,7 +66,9 @@ public final class Escrow {
                 case SQLITE_FLOAT:
                     row[colName] = .float(sqlite3_column_double(stmt, i))
                 case SQLITE_TEXT:
-                    row[colName] = .text(String(cString: sqlite3_column_text(stmt, i)))
+                    row[colName] = .text(
+                        String(cString: sqlite3_column_text(stmt, i))
+                    )
                 case SQLITE_NULL:
                     row[colName] = .null
                 default:
