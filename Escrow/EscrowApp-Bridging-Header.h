@@ -5,4 +5,4 @@
 
 #import <sqlite3.h>
 
-void register_contacts_module(sqlite3 *db);
+int register_contacts_module(sqlite3 *db);

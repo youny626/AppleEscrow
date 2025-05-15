@@ -39,21 +39,28 @@ public final class Escrow {
             }
         }
 
-        register_contacts_module(db)
+        guard register_contacts_module(db) == SQLITE_OK else {
+            fatalError(sqlite3_errmsg(db).debugDescription)
+        }
 
-        sqlite3_exec(
-            db,
-            "CREATE VIRTUAL TABLE Contacts USING contacts_module;",
-            nil,
-            nil,
-            nil
-        )
+        guard
+            sqlite3_exec(
+                db,
+                "CREATE VIRTUAL TABLE Contacts USING contacts_module;",
+                nil,
+                nil,
+                nil
+            ) == SQLITE_OK
+        else {
+            fatalError(sqlite3_errmsg(db).debugDescription)
+        }
     }
 
     public func run<T>(access sql: String, compute: ([Row]) -> T) -> T {
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK
-        else { fatalError("bad SQL") }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            fatalError(sqlite3_errmsg(db).debugDescription)
+        }
 
         var rows: [Row] = []
         while sqlite3_step(stmt) == SQLITE_ROW {

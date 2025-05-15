@@ -196,12 +196,6 @@ static const sqlite3_module ContactsModule = {
     0,           0,
     0,           0};
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-void register_contacts_module(sqlite3 *db) {
-    sqlite3_create_module(db, "contacts_module", &ContactsModule, 0);
+int register_contacts_module(sqlite3 *db) {
+    return sqlite3_create_module(db, "contacts_module", &ContactsModule, 0);
 }
-#ifdef __cplusplus
-}
-#endif
