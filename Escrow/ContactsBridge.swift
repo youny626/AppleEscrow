@@ -40,24 +40,57 @@ private func dupCString(_ str: String) -> UnsafePointer<CChar>? {
 // MARK: contacts_vtab_prepare ------------------------------------------------
 @_cdecl("contacts_vtab_prepare")
 func contacts_vtab_prepare(
-    _ firstPrefixC: UnsafePointer<CChar>?,
-    _ lastPrefixC: UnsafePointer<CChar>?,
+    _ firstC: UnsafePointer<CChar>?,
+    _ lastC: UnsafePointer<CChar>?,
     _ colMask: UInt,
     _ outHandle: UnsafeMutablePointer<ContactsHandlePtr?>!,
-    _ outRowCount: UnsafeMutablePointer<Int32>!
+    _ outCount: UnsafeMutablePointer<Int32>!
 ) -> Int32 {
-    var firstPrefix = firstPrefixC.flatMap { String(cString: $0) }
-    var lastPrefix = lastPrefixC.flatMap { String(cString: $0) }
-
-    // Handle SQL LIKE 'foo%' → Swift prefix
-    if let fp = firstPrefix, fp.hasSuffix("%") {
-        firstPrefix = String(fp.dropLast())
+    // ---------- Decode raw strings & classify (none / exact / prefix) ------
+    enum Match {
+        case none
+        case exact(String)
+        case prefix(String)
     }
-    if let lp = lastPrefix, lp.hasSuffix("%") {
-        lastPrefix = String(lp.dropLast())
+    func classify(_ ptr: UnsafePointer<CChar>?) -> Match {
+        guard let ptr = ptr else { return .none }
+        var s = String(cString: ptr)
+        if s.isEmpty { return .none }
+        if s.last == "%" {
+            s.removeLast()
+            return .prefix(s)
+        }
+        return .exact(s)
+    }
+    let firstM = classify(firstC)
+    let lastM = classify(lastC)
+
+    // ---------- Choose Contacts predicate (best effort) --------------------
+    func predicate(for first: Match, _ last: Match) -> NSPredicate? {
+        switch (first, last) {
+        case (.none, .none): return nil
+        case (.exact(let f), .none):
+            return CNContact.predicateForContacts(matchingName: f)
+        case (.prefix(let fP), .none):
+            return CNContact.predicateForContacts(matchingName: fP)
+        case (.none, .exact(let l)):
+            return CNContact.predicateForContacts(matchingName: l)
+        case (.none, .prefix(let lP)):
+            return CNContact.predicateForContacts(matchingName: lP)
+        case (.exact(let f), .exact(let l)):
+            return CNContact.predicateForContacts(matchingName: "\(f) \(l)")
+        case (.exact(let f), .prefix(let lp)):
+            return CNContact.predicateForContacts(matchingName: "\(f) \(lp)")
+        case (.prefix, .exact(let l)):
+            return CNContact.predicateForContacts(matchingName: l)  // safest
+        case (.prefix(let fp), .prefix(let lp)):
+            return CNContact.predicateForContacts(matchingName: "\(fp) \(lp)")
+        }
     }
 
-    // Build keysToFetch based on projection
+    let pred = predicate(for: firstM, lastM)
+
+    // ---------- Build keys for projection ----------------------------------
     var keys: [CNKeyDescriptor] = []
     if colMask & ColMask.firstName != 0 {
         keys.append(CNContactGivenNameKey as CNKeyDescriptor)
@@ -70,35 +103,36 @@ func contacts_vtab_prepare(
     }
     if keys.isEmpty { keys = [CNContactIdentifierKey as CNKeyDescriptor] }
 
-    // Fetch contacts (simple linear scan; good enough for a demo)
+    // ---------- Fetch contacts ---------------------------------------------
+    let store = CNContactStore()
     var g: [String] = []
     var f: [String] = []
     var p: [String] = []
-    let store = CNContactStore()
-    let request = CNContactFetchRequest(keysToFetch: keys)
-    try? store.enumerateContacts(with: request) { contact, _ in
-        if let pref = firstPrefix, !pref.isEmpty,
-            !contact.givenName.hasPrefix(pref)
-        {
-            return
-        }
-        if let pref = lastPrefix, !pref.isEmpty,
-            !contact.familyName.hasPrefix(pref)
-        {
-            return
-        }
-        g.append(contact.givenName)
-        f.append(contact.familyName)
-        let joined = contact.phoneNumbers.map { $0.value.stringValue }.joined(
-            separator: ", "
+    func append(_ c: CNContact) {
+        g.append(c.givenName)
+        f.append(c.familyName)
+        p.append(
+            c.phoneNumbers.map { $0.value.stringValue }.joined(separator: ", ")
         )
-        p.append(joined)
+    }
+    do {
+        if let pr = pred {
+            let cs = try store.unifiedContacts(matching: pr, keysToFetch: keys)
+            cs.forEach(append)
+        } else {
+            let req = CNContactFetchRequest(keysToFetch: keys)
+            try store.enumerateContacts(with: req) { c, _ in append(c) }
+        }
+    } catch {
+        /* on failure return 0 rows */
     }
 
+    // ---------- Ship snapshot back to C ------------------------------------
     let snap = ContactsHandle(given: g, family: f, phones: p, mask: colMask)
-    let unmanaged = Unmanaged.passRetained(snap)
-    outHandle.pointee = ContactsHandlePtr(unmanaged.toOpaque())
-    outRowCount.pointee = Int32(g.count)
+    outHandle.pointee = ContactsHandlePtr(
+        Unmanaged.passRetained(snap).toOpaque()
+    )
+    outCount.pointee = Int32(g.count)
     return 0
 }
 

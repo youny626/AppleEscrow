@@ -15,10 +15,13 @@ struct EscrowAppApp: App {
         // Run the heavy work off the main thread
         DispatchQueue.global(qos: .userInitiated).async {
             let rowCount = Escrow.shared.run(
-                // "SELECT firstName, lastName, phoneNumbers FROM Contacts LIMIT 5"
-                // "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName = 'Yue'"
                 access:
-                    "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE lastName LIKE 'G%' AND firstName = 'Yue'"
+                    // "SELECT firstName, lastName, phoneNumbers FROM Contacts LIMIT 5"
+                    // "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName = 'Zhiru'"
+                    // "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE lastName LIKE 'Z%'"
+                    // "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE lastName LIKE 'Z%' AND firstName = 'Zhiru'"
+                    // "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName LIKE 'Z%' AND lastName = 'Zhu'"
+                    "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName LIKE 'Z%' AND lastName LIKE 'Z%'"
             ) { rows in
                 rows.forEach { row in
                     if case let .text(fn)? = row["firstName"],
