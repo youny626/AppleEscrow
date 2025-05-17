@@ -10,8 +10,8 @@ import Foundation
 
 // Bit positions copied from colUsed → colMask (keep in sync with C)
 private struct ColMask {
-    static let firstName: UInt = 1 << 0
-    static let lastName: UInt = 1 << 1
+    static let givenName: UInt = 1 << 0
+    static let familyName: UInt = 1 << 1
     static let phoneNumbers: UInt = 1 << 2
 }
 
@@ -69,8 +69,8 @@ func contacts_vtab_prepare(
 
     // 3. Keys to fetch for projection push-down  (add flag vars)
     var keys: [CNKeyDescriptor] = []
-    let needGiven = colMask & ColMask.firstName != 0
-    let needFamily = colMask & ColMask.lastName != 0
+    let needGiven = colMask & ColMask.givenName != 0
+    let needFamily = colMask & ColMask.familyName != 0
     let needPhone = colMask & ColMask.phoneNumbers != 0
 
     if needGiven {
@@ -162,15 +162,15 @@ func contacts_vtab_row(
     let i = Int(rowIndex)
     if i >= snap.given.count { return }
 
-    // firstName
+    // givenName
     outFirst.pointee =
-        (snap.mask & ColMask.firstName != 0)
+        (snap.mask & ColMask.givenName != 0)
         ? dupCString(snap.given[i])
         : nil
 
-    // lastName
+    // familyName
     outLast.pointee =
-        (snap.mask & ColMask.lastName != 0)
+        (snap.mask & ColMask.familyName != 0)
         ? dupCString(snap.family[i])
         : nil
 

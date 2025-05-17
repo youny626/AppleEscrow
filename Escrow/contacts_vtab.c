@@ -26,10 +26,10 @@ extern void contacts_vtab_release(void *handle);
 #define ZERO(P) memset((P), 0, sizeof(*(P)))
 
 /* idxNum bit‑flags */
-#define IDX_FIRSTNAME_EQ 0x01
-#define IDX_LASTNAME_EQ 0x02
-#define IDX_FIRSTNAME_LIKE 0x04
-#define IDX_LASTNAME_LIKE 0x08
+#define IDX_GIVENNAME_EQ 0x01
+#define IDX_FAMILYNAME_EQ 0x02
+#define IDX_GIVENNAME_LIKE 0x04
+#define IDX_FAMILYNAME_LIKE 0x08
 
 /************************  Object definitions  ***************************/
 typedef struct ContactsTab ContactsTab;
@@ -52,10 +52,10 @@ struct ContactsCsr {
 /************************  xCreate / xConnect  ***************************/
 static int ctConnect(sqlite3 *db, void *pAux, int argc, const char *const *argv,
                      sqlite3_vtab **ppVtab, char **pzErr) {
-    const char *schema = "CREATE TABLE x("     /* 0 */
-                         " firstName    TEXT," /* 1 */
-                         " lastName     TEXT," /* 2 */
-                         " phoneNumbers TEXT"  /* 3 */
+    const char *schema = "CREATE TABLE x("       /* 0 */
+                         " givenName    TEXT,"   /* 1 */
+                         " familyName     TEXT," /* 2 */
+                         " phoneNumbers TEXT"    /* 3 */
                          ")";
     int rc = sqlite3_declare_vtab(db, schema);
     if (rc)
@@ -84,7 +84,7 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
             continue;
 
         /* We can build a Contacts predicate from any = or LIKE prefix
-           on firstName (col 0) or lastName (col 1). */
+           on givenName (col 0) or familyName (col 1). */
         if ((c->iColumn == 0 || c->iColumn == 1) &&
             (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
              c->op == SQLITE_INDEX_CONSTRAINT_LIKE)) {
@@ -134,12 +134,12 @@ static int ctFilter(sqlite3_vtab_cursor *pCsr, int idxNum, const char *idxStr,
     c->colMask = idxStr ? strtoul(idxStr, NULL, 16) : 0;
 
     int ai = 0;
-    if (idxNum & (IDX_FIRSTNAME_EQ | IDX_FIRSTNAME_LIKE)) {
+    if (idxNum & (IDX_GIVENNAME_EQ | IDX_GIVENNAME_LIKE)) {
         const char *z = (const char *)sqlite3_value_text(argv[ai++]);
         if (z)
             c->zFirst = strdup(z);
     }
-    if (idxNum & (IDX_LASTNAME_EQ | IDX_LASTNAME_LIKE)) {
+    if (idxNum & (IDX_FAMILYNAME_EQ | IDX_FAMILYNAME_LIKE)) {
         const char *z = (const char *)sqlite3_value_text(argv[ai++]);
         if (z)
             c->zLast = strdup(z);

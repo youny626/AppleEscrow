@@ -16,14 +16,14 @@ struct EscrowAppApp: App {
         DispatchQueue.global(qos: .userInitiated).async {
             let rowCount = Escrow.shared.run(
                 access:
-                    //                    "SELECT firstName, phoneNumbers FROM Contacts"
-                                    "SELECT lastName, firstName FROM Contacts"
-                    //                     "SELECT firstName, lastName, phoneNumbers FROM Contacts LIMIT 5"
-                    //                     "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName = 'Zhiru'"
-                    //                    "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE lastName LIKE 'Z%'"
-                    //                     "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE lastName LIKE 'Z%' AND firstName = 'Zhiru'"
-//                    "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName LIKE 'Z%' AND lastName = 'Zhu'"
-                    //                    "SELECT firstName, lastName, phoneNumbers FROM Contacts WHERE firstName LIKE 'Z%' AND lastName LIKE 'Z%'"
+                    //                    "SELECT givenName, phoneNumbers FROM Contacts"
+                    //                    "SELECT familyName, givenName FROM Contacts"
+                    //                     "SELECT givenName, familyName, phoneNumbers FROM Contacts LIMIT 5"
+                    //                     "SELECT givenName, familyName, phoneNumbers FROM Contacts WHERE givenName = 'Zhiru'"
+                    //                    "SELECT givenName, familyName, phoneNumbers FROM Contacts WHERE familyName LIKE 'Z%'"
+                    //                     "SELECT givenName, familyName, phoneNumbers FROM Contacts WHERE familyName LIKE 'Z%' AND givenName = 'Zhiru'"
+                    //                    "SELECT givenName, familyName, phoneNumbers FROM Contacts WHERE givenName LIKE 'Z%' AND familyName = 'Zhu'"
+                    "SELECT givenName, familyName, phoneNumbers FROM Contacts WHERE givenName LIKE 'Z%' AND familyName LIKE 'Z%'"
             ) { rows in
                 rows.forEach { row in
                     print(row)
