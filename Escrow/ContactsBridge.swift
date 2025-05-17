@@ -67,18 +67,24 @@ func contacts_vtab_prepare(
         predicate = CNContact.predicateForContacts(matchingName: l)
     }  // else: no usable predicate → enumerate all
 
-    // 3. Keys to fetch for projection push-down
+    // 3. Keys to fetch for projection push-down  (add flag vars)
     var keys: [CNKeyDescriptor] = []
-    if colMask & ColMask.firstName != 0 {
+    let needGiven = colMask & ColMask.firstName != 0
+    let needFamily = colMask & ColMask.lastName != 0
+    let needPhone = colMask & ColMask.phoneNumbers != 0
+
+    if needGiven {
         keys.append(CNContactGivenNameKey as CNKeyDescriptor)
     }
-    if colMask & ColMask.lastName != 0 {
+    if needFamily {
         keys.append(CNContactFamilyNameKey as CNKeyDescriptor)
     }
-    if colMask & ColMask.phoneNumbers != 0 {
+    if needPhone {
         keys.append(CNContactPhoneNumbersKey as CNKeyDescriptor)
     }
-    if keys.isEmpty { keys = [CNContactIdentifierKey as CNKeyDescriptor] }
+    if keys.isEmpty {
+        keys = [CNContactIdentifierKey as CNKeyDescriptor]
+    }
 
     // 4. Fetch contacts
     let store = CNContactStore()
@@ -87,11 +93,26 @@ func contacts_vtab_prepare(
     var phones: [String] = []
 
     func append(_ c: CNContact) {
-        given.append(c.givenName)
-        family.append(c.familyName)
-        phones.append(
-            c.phoneNumbers.map { $0.value.stringValue }.joined(separator: ", ")
-        )
+        // Always keep arrays the same length — use "" when the column was not requested.
+        if needGiven {
+            given.append(c.givenName)
+        } else {
+            given.append("")
+        }
+
+        if needFamily {
+            family.append(c.familyName)
+        } else {
+            family.append("")
+        }
+
+        if needPhone {
+            let joined = c.phoneNumbers.map { $0.value.stringValue }
+                .joined(separator: ", ")
+            phones.append(joined)
+        } else {
+            phones.append("")
+        }
     }
 
     do {
@@ -103,10 +124,12 @@ func contacts_vtab_prepare(
             hits.forEach(append)
         } else {
             let req = CNContactFetchRequest(keysToFetch: keys)
-            try store.enumerateContacts(with: req) { c, _ in append(c) }
+            try store.enumerateContacts(with: req) {
+                c,
+                _ in append(c)
+            }
         }
     } catch {
-        // On error we simply return zero rows
         fatalError(error.localizedDescription)
     }
 
@@ -140,23 +163,22 @@ func contacts_vtab_row(
     if i >= snap.given.count { return }
 
     // firstName
-    if snap.mask & ColMask.firstName != 0 {
-        outFirst.pointee = dupCString(snap.given[i])
-    } else {
-        outFirst.pointee = dupCString("")
-    }
+    outFirst.pointee =
+        (snap.mask & ColMask.firstName != 0)
+        ? dupCString(snap.given[i])
+        : nil
+
     // lastName
-    if snap.mask & ColMask.lastName != 0 {
-        outLast.pointee = dupCString(snap.family[i])
-    } else {
-        outLast.pointee = dupCString("")
-    }
+    outLast.pointee =
+        (snap.mask & ColMask.lastName != 0)
+        ? dupCString(snap.family[i])
+        : nil
+
     // phones
-    if snap.mask & ColMask.phoneNumbers != 0 {
-        outPhone.pointee = dupCString(snap.phones[i])
-    } else {
-        outPhone.pointee = dupCString("")
-    }
+    outPhone.pointee =
+        (snap.mask & ColMask.phoneNumbers != 0 && !snap.phones[i].isEmpty)
+        ? dupCString(snap.phones[i])
+        : nil
 }
 
 // MARK: contacts_vtab_release ------------------------------------------------

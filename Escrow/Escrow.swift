@@ -9,7 +9,7 @@ import Contacts
 import Foundation
 import SQLite3
 
-public enum SQLValue {
+public enum CellValue {
     case text(String)
     case int(Int64)
     case float(Double)
@@ -19,7 +19,33 @@ public enum SQLValue {
     case null
     case custom(Any)
 }
-public typealias Row = [String: SQLValue]
+
+// Row keeps the column order that appeared in the SELECT list
+public struct Row: RandomAccessCollection, ExpressibleByDictionaryLiteral {
+    private var pairs: [(key: String, value: CellValue)]
+
+    // MARK: Collection conformance (for-in, subscript by index)
+    public typealias Index = Int
+    public var startIndex: Int { pairs.startIndex }
+    public var endIndex: Int { pairs.endIndex }
+    public subscript(position: Int) -> (key: String, value: CellValue) {
+        pairs[position]
+    }
+    public func index(after i: Int) -> Int { pairs.index(after: i) }
+
+    // MARK: Keyed lookup
+    public subscript(key: String) -> CellValue? {
+        pairs.first(where: { $0.key == key })?.value
+    }
+
+    // MARK: Literal
+    public init(dictionaryLiteral elements: (String, CellValue)...) {
+        self.pairs = elements
+    }
+
+    // Internal init used by Escrow.run
+    init(_ pairs: [(String, CellValue)]) { self.pairs = pairs }
+}
 
 public final class Escrow {
     public static let shared = Escrow()
@@ -64,25 +90,25 @@ public final class Escrow {
 
         var rows: [Row] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            var row: Row = [:]
+            var ordered: [(String, CellValue)] = []
             for i in 0..<sqlite3_column_count(stmt) {
-                let colName = String(cString: sqlite3_column_name(stmt, i))
+                let name = String(cString: sqlite3_column_name(stmt, i))
+                let value: CellValue
                 switch sqlite3_column_type(stmt, i) {
                 case SQLITE_INTEGER:
-                    row[colName] = .int(sqlite3_column_int64(stmt, i))
+                    value = .int(sqlite3_column_int64(stmt, i))
                 case SQLITE_FLOAT:
-                    row[colName] = .float(sqlite3_column_double(stmt, i))
+                    value = .float(sqlite3_column_double(stmt, i))
                 case SQLITE_TEXT:
-                    row[colName] = .text(
-                        String(cString: sqlite3_column_text(stmt, i))
-                    )
+                    value = .text(String(cString: sqlite3_column_text(stmt, i)))
                 case SQLITE_NULL:
-                    row[colName] = .null
+                    value = .null
                 default:
-                    row[colName] = .null
+                    value = .null
                 }
+                ordered.append((name, value))
             }
-            rows.append(row)
+            rows.append(Row(ordered))
         }
         sqlite3_finalize(stmt)
         return compute(rows)
