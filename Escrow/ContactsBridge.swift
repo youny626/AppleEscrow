@@ -51,9 +51,13 @@ func contacts_vtab_prepare(
         guard var s = ptr.flatMap({ String(cString: $0) }), !s.isEmpty else {
             return nil
         }
-        if s.last == "%" { s.removeLast() }
+        if s.last == "%" {
+            s.removeLast()
+        }
+        //        print(s)
         return s.isEmpty ? nil : s  // might become empty after %
     }
+
     let firstPart = clean(firstC)
     let lastPart = clean(lastC)
 
@@ -122,12 +126,14 @@ func contacts_vtab_prepare(
                 keysToFetch: keys
             )
             hits.forEach(append)
+            print("Predicate pushdown")
         } else {
             let req = CNContactFetchRequest(keysToFetch: keys)
             try store.enumerateContacts(with: req) {
                 c,
                 _ in append(c)
             }
+            //            print("in")
         }
     } catch {
         fatalError(error.localizedDescription)

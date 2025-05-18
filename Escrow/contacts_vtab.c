@@ -83,15 +83,21 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
         if (!c->usable)
             continue;
 
-        /* We can build a Contacts predicate from any = or LIKE prefix
-           on givenName (col 0) or familyName (col 1). */
         if ((c->iColumn == 0 || c->iColumn == 1) &&
             (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
              c->op == SQLITE_INDEX_CONSTRAINT_LIKE)) {
-            /* Pass the parameter so Swift can read it …            */
+            if (c->iColumn == 0) { // givenName
+                idxNum |=
+                    (c->op == SQLITE_INDEX_CONSTRAINT_EQ ? IDX_GIVENNAME_EQ
+                                                         : IDX_GIVENNAME_LIKE);
+            } else { // familyName
+                idxNum |=
+                    (c->op == SQLITE_INDEX_CONSTRAINT_EQ ? IDX_FAMILYNAME_EQ
+                                                         : IDX_FAMILYNAME_LIKE);
+            }
+
             pIdx->aConstraintUsage[i].argvIndex = argvIdx++;
-            /* …but set omit = 0, meaning SQLite will STILL apply it */
-            pIdx->aConstraintUsage[i].omit = 0;
+            pIdx->aConstraintUsage[i].omit = 0; // SQLite still filters
         }
     }
 
