@@ -83,82 +83,62 @@ static int ctDisconnect(sqlite3_vtab *p) {
 /***************************  xBestIndex  ********************************/
 static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
     int idxNum = 0;
-    int argvIdx = 1; /* parameters are 1‑based */
+    int argv = 1; /* 1-based */
 
-    for (int i = 0; i < pIdx->nConstraint; i++) {
-        struct sqlite3_index_constraint *c = &pIdx->aConstraint[i];
-        if (!c->usable)
-            continue;
+    /* Pass 0-3: force columns in the order   id → given → family → phone */
+    for (int col = 0; col <= 3; col++) {
+        for (int i = 0; i < pIdx->nConstraint; i++) {
+            struct sqlite3_index_constraint *c = &pIdx->aConstraint[i];
+            if (!c->usable || c->iColumn != col)
+                continue;
 
-        /*
-         +  recognise = on identifier (col-0) and mainPhoneNumber (col-3) too
-            if ((c->iColumn==0  && c->op==SQLITE_INDEX_CONSTRAINT_EQ)     ||
-         -      (c->iColumn==0||c->iColumn==1) && … )
-         +      (c->iColumn==3  && c->op==SQLITE_INDEX_CONSTRAINT_EQ)   ||
-         +      ((c->iColumn==1||c->iColumn==2) &&
-         +       (c->op==SQLITE_INDEX_CONSTRAINT_EQ ||
-         c->op==SQLITE_INDEX_CONSTRAINT_LIKE)))
-         {
-             switch(c->iColumn){
-         +     case 0: idxNum |= IDX_ID_EQ;           break;
-               case 1: idxNum |= (c->op==… ? IDX_GIVEN_EQ     : IDX_GIVEN_PREFIX
-         ); break; case 2: idxNum |= (c->op==… ? IDX_FAMILY_EQ    :
-         IDX_FAMILY_PREFIX); break;
-         +     case 3: idxNum |= IDX_PHONE_EQ;        break;
-             }
-             …
-         } */
+            switch (col) {
+            case 0: /* identifier = ? */
+                if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+                    idxNum |= IDX_ID_EQ;
+                } else
+                    continue;
+                break;
 
-        int setConstraint = 0;
+            case 1: /* givenName = ?  or LIKE ? */
+                if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+                    idxNum |= IDX_GIVEN_EQ;
+                } else if (c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
+                    idxNum |= IDX_GIVEN_PREFIX;
+                } else
+                    continue;
+                break;
 
-        switch (c->iColumn) {
-        case 0:
-            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
-                idxNum |= IDX_ID_EQ;
-                setConstraint = 1;
+            case 2: /* familyName = ? or LIKE ? */
+                if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+                    idxNum |= IDX_FAMILY_EQ;
+                } else if (c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
+                    idxNum |= IDX_FAMILY_PREFIX;
+                } else
+                    continue;
+                break;
+
+            case 3: /* mainPhoneNumber = ? */
+                if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+                    idxNum |= IDX_PHONE_EQ;
+                } else
+                    continue;
+                break;
             }
-            break;
-        case 1:
-            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
-                c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
-                idxNum |= (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
-                           c->op == SQLITE_INDEX_CONSTRAINT_LIKE)
-                              ? IDX_GIVEN_EQ
-                              : IDX_GIVEN_PREFIX;
-                setConstraint = 1;
-            }
-            break;
-        case 2:
-            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
-                c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
-                idxNum |= (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
-                           c->op == SQLITE_INDEX_CONSTRAINT_LIKE)
-                              ? IDX_FAMILY_EQ
-                              : IDX_FAMILY_PREFIX;
-                setConstraint = 1;
-            }
-            break;
-        case 3:
-            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
-                idxNum |= IDX_PHONE_EQ;
-                setConstraint = 1;
-            }
-            break;
-        }
 
-        if (setConstraint > 0) {
-            pIdx->aConstraintUsage[i].argvIndex = argvIdx++;
-            pIdx->aConstraintUsage[i].omit = 0; // SQLite still filters
+            /* record where SQLite should bind this parameter */
+            pIdx->aConstraintUsage[i].argvIndex = argv++;
+            pIdx->aConstraintUsage[i].omit = 0; /* SQLite still re-filters */
         }
     }
 
-    /* Projection mask → idxStr */
+    /* projection mask → idxStr (unchanged) */
     unsigned long colMask = (unsigned long)pIdx->colUsed;
     pIdx->idxStr = sqlite3_mprintf("%lx", colMask);
     pIdx->needToFreeIdxStr = 1;
     pIdx->idxNum = idxNum;
-    pIdx->estimatedCost = idxNum ? 1000.0 : 1000000.0;
-    return VTAB_OK;
+    pIdx->estimatedCost = idxNum ? 1000.0 : 1e6;
+    return SQLITE_OK;
 }
 
 /*****************************  Cursor  **********************************/

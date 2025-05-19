@@ -47,8 +47,8 @@ private func dupCString(_ str: String) -> UnsafePointer<CChar>? {
 @_cdecl("contacts_vtab_prepare")
 func contacts_vtab_prepare(
     _ idC: UnsafePointer<CChar>?,
-    _ firstC: UnsafePointer<CChar>?,
-    _ lastC: UnsafePointer<CChar>?,
+    _ givenC: UnsafePointer<CChar>?,
+    _ familyC: UnsafePointer<CChar>?,
     _ phoneC: UnsafePointer<CChar>?,
     _ colMask: UInt,
     _ outHandle: UnsafeMutablePointer<ContactsHandlePtr?>!,
@@ -70,14 +70,15 @@ func contacts_vtab_prepare(
         return s.isEmpty ? nil : s  // might become empty after %
     }
 
-    let firstPart = clean(firstC, true)
-    let lastPart = clean(lastC, true)
+    let firstPart = clean(givenC, true)
+    let lastPart = clean(familyC, true)
 
-    // 2. Build Contacts predicate (if any)
+    // 2. Build Contacts predicate (if any). No compound predicate allowed
     var predicate: NSPredicate? = nil
     if let id = clean(idC) {
         predicate = CNContact.predicateForContacts(withIdentifiers: [id])
     } else if let phone = clean(phoneC) {
+        //        print(phone)
         let num = CNPhoneNumber(stringValue: phone)
         predicate = CNContact.predicateForContacts(matching: num)
     } else if let f = firstPart, let l = lastPart {
@@ -87,6 +88,8 @@ func contacts_vtab_prepare(
     } else if let l = lastPart {
         predicate = CNContact.predicateForContacts(matchingName: l)
     }  // else: no usable predicate → enumerate all
+
+    //    print(predicate.debugDescription)
 
     // 3. Keys to fetch for projection push-down  (add flag vars)
     var keys: [CNKeyDescriptor] = []
