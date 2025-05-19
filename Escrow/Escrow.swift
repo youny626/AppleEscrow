@@ -53,7 +53,7 @@ public final class Escrow {
 
     private init() {
         guard sqlite3_open(":memory:", &db) == SQLITE_OK else {
-            fatalError("Could not open SQLite")
+            fatalError(String(cString: sqlite3_errmsg(db)))
         }
 
         let contactStore = CNContactStore()
@@ -66,7 +66,7 @@ public final class Escrow {
         }
 
         guard register_contacts_module(db) == SQLITE_OK else {
-            fatalError(sqlite3_errmsg(db).debugDescription)
+            fatalError(String(cString: sqlite3_errmsg(db)))
         }
 
         guard
@@ -78,14 +78,14 @@ public final class Escrow {
                 nil
             ) == SQLITE_OK
         else {
-            fatalError(sqlite3_errmsg(db).debugDescription)
+            fatalError(String(cString: sqlite3_errmsg(db)))
         }
     }
 
     public func run<T>(access sql: String, compute: ([Row]) -> T) -> T {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            fatalError(sqlite3_errmsg(db).debugDescription)
+            fatalError(String(cString: sqlite3_errmsg(db)))
         }
 
         var rows: [Row] = []
@@ -110,7 +110,9 @@ public final class Escrow {
             }
             rows.append(Row(ordered))
         }
-        sqlite3_finalize(stmt)
+        guard sqlite3_finalize(stmt) == SQLITE_OK else {
+            fatalError(String(cString: sqlite3_errmsg(db)))
+        }
         return compute(rows)
     }
 }

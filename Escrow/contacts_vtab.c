@@ -12,11 +12,13 @@ SQLITE_EXTENSION_INIT1
 #include <string.h>
 
 /***********************  Swift bridge symbols  ***************************/
-extern int contacts_vtab_prepare(const char *firstPrefix,
-                                 const char *lastPrefix, unsigned long colMask,
-                                 void **outHandle, int *outRowCount);
-extern void contacts_vtab_row(void *handle, int rowIndex, const char **outFirst,
-                              const char **outLast, const char **outPhone);
+extern int contacts_vtab_prepare(const char *idEq, const char *givenPrefix,
+                                 const char *familyPrefix, const char *phoneEq,
+                                 unsigned long colMask, void **outHandle,
+                                 int *outRowCount);
+extern void contacts_vtab_row(void *handle, int rowIndex, const char **outId,
+                              const char **outGiven, const char **outFamily,
+                              const char **outPhone);
 extern void contacts_vtab_release(void *handle);
 
 /*****************************  Helpers  *********************************/
@@ -26,10 +28,12 @@ extern void contacts_vtab_release(void *handle);
 #define ZERO(P) memset((P), 0, sizeof(*(P)))
 
 /* idxNum bit‑flags */
-#define IDX_GIVENNAME_EQ 0x01
-#define IDX_FAMILYNAME_EQ 0x02
-#define IDX_GIVENNAME_LIKE 0x04
-#define IDX_FAMILYNAME_LIKE 0x08
+#define IDX_ID_EQ 0x01
+#define IDX_GIVEN_EQ 0x02
+#define IDX_GIVEN_PREFIX 0x04
+#define IDX_FAMILY_EQ 0x08
+#define IDX_FAMILY_PREFIX 0x10
+#define IDX_PHONE_EQ 0x20
 
 /************************  Object definitions  ***************************/
 typedef struct ContactsTab ContactsTab;
@@ -44,18 +48,21 @@ struct ContactsCsr {
     void *h;               /* Opaque Swift handle */
     int nRow;              /* Snapshot size       */
     int iRow;              /* Current row index   */
-    char *zFirst;          /* malloc‑owned prefix */
-    char *zLast;           /* malloc‑owned prefix */
+    char *zId;             /* malloc‑owned prefix */
+    char *zGiven;          /* malloc‑owned prefix */
+    char *zFamily;         /* malloc‑owned prefix */
+    char *zPhone;          /* malloc‑owned prefix */
     unsigned long colMask; /* Projection bitmask  */
 };
 
 /************************  xCreate / xConnect  ***************************/
 static int ctConnect(sqlite3 *db, void *pAux, int argc, const char *const *argv,
                      sqlite3_vtab **ppVtab, char **pzErr) {
-    const char *schema = "CREATE TABLE x("       /* 0 */
-                         " givenName    TEXT,"   /* 1 */
-                         " familyName     TEXT," /* 2 */
-                         " phoneNumbers TEXT"    /* 3 */
+    const char *schema = "CREATE TABLE x("
+                         " identifier   TEXT,"
+                         " givenName    TEXT,"
+                         " familyName   TEXT,"
+                         " mainPhoneNumber  TEXT"
                          ")";
     int rc = sqlite3_declare_vtab(db, schema);
     if (rc)
@@ -83,19 +90,63 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
         if (!c->usable)
             continue;
 
-        if ((c->iColumn == 0 || c->iColumn == 1) &&
-            (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
-             c->op == SQLITE_INDEX_CONSTRAINT_LIKE)) {
-            if (c->iColumn == 0) { // givenName
-                idxNum |=
-                    (c->op == SQLITE_INDEX_CONSTRAINT_EQ ? IDX_GIVENNAME_EQ
-                                                         : IDX_GIVENNAME_LIKE);
-            } else { // familyName
-                idxNum |=
-                    (c->op == SQLITE_INDEX_CONSTRAINT_EQ ? IDX_FAMILYNAME_EQ
-                                                         : IDX_FAMILYNAME_LIKE);
-            }
+        /*
+         +  recognise = on identifier (col-0) and mainPhoneNumber (col-3) too
+            if ((c->iColumn==0  && c->op==SQLITE_INDEX_CONSTRAINT_EQ)     ||
+         -      (c->iColumn==0||c->iColumn==1) && … )
+         +      (c->iColumn==3  && c->op==SQLITE_INDEX_CONSTRAINT_EQ)   ||
+         +      ((c->iColumn==1||c->iColumn==2) &&
+         +       (c->op==SQLITE_INDEX_CONSTRAINT_EQ ||
+         c->op==SQLITE_INDEX_CONSTRAINT_LIKE)))
+         {
+             switch(c->iColumn){
+         +     case 0: idxNum |= IDX_ID_EQ;           break;
+               case 1: idxNum |= (c->op==… ? IDX_GIVEN_EQ     : IDX_GIVEN_PREFIX
+         ); break; case 2: idxNum |= (c->op==… ? IDX_FAMILY_EQ    :
+         IDX_FAMILY_PREFIX); break;
+         +     case 3: idxNum |= IDX_PHONE_EQ;        break;
+             }
+             …
+         } */
 
+        int setConstraint = 0;
+
+        switch (c->iColumn) {
+        case 0:
+            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+                idxNum |= IDX_ID_EQ;
+                setConstraint = 1;
+            }
+            break;
+        case 1:
+            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
+                c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
+                idxNum |= (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
+                           c->op == SQLITE_INDEX_CONSTRAINT_LIKE)
+                              ? IDX_GIVEN_EQ
+                              : IDX_GIVEN_PREFIX;
+                setConstraint = 1;
+            }
+            break;
+        case 2:
+            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
+                c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
+                idxNum |= (c->op == SQLITE_INDEX_CONSTRAINT_EQ ||
+                           c->op == SQLITE_INDEX_CONSTRAINT_LIKE)
+                              ? IDX_FAMILY_EQ
+                              : IDX_FAMILY_PREFIX;
+                setConstraint = 1;
+            }
+            break;
+        case 3:
+            if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+                idxNum |= IDX_PHONE_EQ;
+                setConstraint = 1;
+            }
+            break;
+        }
+
+        if (setConstraint > 0) {
             pIdx->aConstraintUsage[i].argvIndex = argvIdx++;
             pIdx->aConstraintUsage[i].omit = 0; // SQLite still filters
         }
@@ -125,8 +176,10 @@ static int ctClose(sqlite3_vtab_cursor *pCsr) {
     ContactsCsr *c = (ContactsCsr *)pCsr;
     if (c->h)
         contacts_vtab_release(c->h);
-    FREE(c->zFirst);
-    FREE(c->zLast);
+    FREE(c->zId);
+    FREE(c->zGiven);
+    FREE(c->zFamily);
+    FREE(c->zPhone);
     FREE(c);
     return VTAB_OK;
 }
@@ -140,19 +193,18 @@ static int ctFilter(sqlite3_vtab_cursor *pCsr, int idxNum, const char *idxStr,
     c->colMask = idxStr ? strtoul(idxStr, NULL, 16) : 0;
 
     int ai = 0;
-    if (idxNum & (IDX_GIVENNAME_EQ | IDX_GIVENNAME_LIKE)) {
-        const char *z = (const char *)sqlite3_value_text(argv[ai++]);
-        if (z)
-            c->zFirst = strdup(z);
-    }
-    if (idxNum & (IDX_FAMILYNAME_EQ | IDX_FAMILYNAME_LIKE)) {
-        const char *z = (const char *)sqlite3_value_text(argv[ai++]);
-        if (z)
-            c->zLast = strdup(z);
-    }
+    if (idxNum & IDX_ID_EQ)
+        c->zId = strdup((const char *)sqlite3_value_text(argv[ai++]));
+    if (idxNum & (IDX_GIVEN_EQ | IDX_GIVEN_PREFIX))
+        c->zGiven = strdup((const char *)sqlite3_value_text(argv[ai++]));
+    if (idxNum & (IDX_FAMILY_EQ | IDX_FAMILY_PREFIX))
+        c->zFamily = strdup((const char *)sqlite3_value_text(argv[ai++]));
+    if (idxNum & IDX_PHONE_EQ)
+        c->zPhone = strdup((const char *)sqlite3_value_text(argv[ai++]));
 
-    int swiftRC =
-        contacts_vtab_prepare(c->zFirst, c->zLast, c->colMask, &c->h, &c->nRow);
+    int swiftRC = contacts_vtab_prepare(c->zId, c->zGiven, c->zFamily,
+                                        c->zPhone, c->colMask, &c->h, &c->nRow);
+
     return swiftRC == 0 ? VTAB_OK : SQLITE_ERROR;
 }
 
@@ -168,12 +220,13 @@ static int ctEof(sqlite3_vtab_cursor *pCsr) {
 /***************************  xColumn / xRowid  ***************************/
 static int ctColumn(sqlite3_vtab_cursor *pCsr, sqlite3_context *ctx, int iCol) {
     ContactsCsr *c = (ContactsCsr *)pCsr;
-    const char *fn = "", *ln = "", *ph = "";
-    contacts_vtab_row(c->h, c->iRow, &fn, &ln, &ph);
-    const char *val = (iCol == 0 ? fn : iCol == 1 ? ln : ph);
+    const char *id = "", *gn = "", *fn = "", *ph = "";
+    contacts_vtab_row(c->h, c->iRow, &id, &gn, &fn, &ph);
+    const char *val = (iCol == 0 ? id : iCol == 1 ? gn : iCol == 2 ? fn : ph);
     sqlite3_result_text(ctx, val, -1, SQLITE_TRANSIENT);
+    free((void *)id);
+    free((void *)gn);
     free((void *)fn);
-    free((void *)ln);
     free((void *)ph);
     return VTAB_OK;
 }
