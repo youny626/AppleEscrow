@@ -9,7 +9,7 @@ import Contacts
 import Foundation
 
 // Bit positions copied from colUsed → colMask (keep in sync with C)
-private struct ColMask {
+private struct ContactsColMask {
     static let identifier: UInt = 1 << 0
     static let givenName: UInt = 1 << 1
     static let familyName: UInt = 1 << 2
@@ -93,10 +93,10 @@ func contacts_vtab_prepare(
 
     // 3. Keys to fetch for projection push-down  (add flag vars)
     var keys: [CNKeyDescriptor] = []
-    let needId = colMask & ColMask.identifier != 0
-    let needGiven = colMask & ColMask.givenName != 0
-    let needFamily = colMask & ColMask.familyName != 0
-    let needPhone = colMask & ColMask.mainPhone != 0
+    let needId = colMask & ContactsColMask.identifier != 0
+    let needGiven = colMask & ContactsColMask.givenName != 0
+    let needFamily = colMask & ContactsColMask.familyName != 0
+    let needPhone = colMask & ContactsColMask.mainPhone != 0
 
     if needId {
         keys.append(CNContactIdentifierKey as CNKeyDescriptor)
@@ -201,22 +201,22 @@ func contacts_vtab_row(
     if i >= snap.ids.count { return }
 
     outId.pointee =
-        (snap.mask & ColMask.identifier != 0)
+        (snap.mask & ContactsColMask.identifier != 0)
         ? dupCString(snap.ids[i])
         : nil
 
     outGiven.pointee =
-        (snap.mask & ColMask.givenName != 0)
+        (snap.mask & ContactsColMask.givenName != 0)
         ? dupCString(snap.givenNames[i])
         : nil
 
     outFamily.pointee =
-        (snap.mask & ColMask.familyName != 0)
+        (snap.mask & ContactsColMask.familyName != 0)
         ? dupCString(snap.familyNames[i])
         : nil
 
     outPhone.pointee =
-        (snap.mask & ColMask.mainPhone != 0 && !snap.phones[i].isEmpty)
+        (snap.mask & ContactsColMask.mainPhone != 0 && !snap.phones[i].isEmpty)
         ? dupCString(snap.phones[i])
         : nil
 }

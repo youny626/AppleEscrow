@@ -7,6 +7,7 @@
 
 import Contacts
 import Foundation
+import Photos
 import SQLite3
 
 public enum CellValue {
@@ -16,15 +17,39 @@ public enum CellValue {
     case bool(Bool)
     case date(Date)
     case blob(Data)
+    case phasset(PHAsset)
     case null
     case custom(Any)
 }
 
-// Row keeps the column order that appeared in the SELECT list
+extension CellValue {
+    var any: Any? {
+        switch self {
+        case .text(let x):
+            return x
+        case .int(let x):
+            return x
+        case .float(let x):
+            return x
+        case .bool(let x):
+            return x
+        case .date(let x):
+            return x
+        case .blob(let x):
+            return x
+        case .phasset(let x):
+            return x
+        case .null:
+            return nil
+        case .custom(let x):
+            return x
+        }
+    }
+}
+
 public struct Row: RandomAccessCollection, ExpressibleByDictionaryLiteral {
     private var pairs: [(key: String, value: CellValue)]
 
-    // MARK: Collection conformance (for-in, subscript by index)
     public typealias Index = Int
     public var startIndex: Int { pairs.startIndex }
     public var endIndex: Int { pairs.endIndex }
@@ -33,18 +58,25 @@ public struct Row: RandomAccessCollection, ExpressibleByDictionaryLiteral {
     }
     public func index(after i: Int) -> Int { pairs.index(after: i) }
 
-    // MARK: Keyed lookup
-    public subscript(key: String) -> CellValue? {
-        pairs.first(where: { $0.key == key })?.value
+    public subscript(key: String) -> Any? {
+        pairs.first { $0.key == key }?.value.any
     }
 
-    // MARK: Literal
+    public func cell(_ key: String) -> CellValue? {
+        pairs.first { $0.key == key }?.value
+    }
+
     public init(dictionaryLiteral elements: (String, CellValue)...) {
         self.pairs = elements
     }
 
-    // Internal init used by Escrow.run
     init(_ pairs: [(String, CellValue)]) { self.pairs = pairs }
+}
+
+extension Row {
+    func get<T>(_ key: String) -> T? {
+        return self[key] as? T
+    }
 }
 
 public final class Escrow {
@@ -65,14 +97,24 @@ public final class Escrow {
             }
         }
 
-        guard register_contacts_module(db) == SQLITE_OK else {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            if status == .authorized {
+                print("Photos permission granted")
+            } else {
+                print("Photos permission denied")
+            }
+        }
+
+        guard register_contacts_module(db) == SQLITE_OK,
+            register_photos_module(db) == SQLITE_OK
+        else {
             fatalError(String(cString: sqlite3_errmsg(db)))
         }
 
         guard
             sqlite3_exec(
                 db,
-                "CREATE VIRTUAL TABLE Contacts USING contacts_module;",
+                "CREATE VIRTUAL TABLE Contacts USING contacts_module; CREATE VIRTUAL TABLE Photos USING photos_module;",
                 nil,
                 nil,
                 nil
@@ -90,25 +132,35 @@ public final class Escrow {
 
         var rows: [Row] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            var ordered: [(String, CellValue)] = []
+            var out: [(String, CellValue)] = []
             for i in 0..<sqlite3_column_count(stmt) {
-                let name = String(cString: sqlite3_column_name(stmt, i))
+                let cname = String(cString: sqlite3_column_name(stmt, i))
+                let ctype = sqlite3_column_type(stmt, i)
                 let value: CellValue
-                switch sqlite3_column_type(stmt, i) {
+                switch ctype {
                 case SQLITE_INTEGER:
                     value = .int(sqlite3_column_int64(stmt, i))
                 case SQLITE_FLOAT:
                     value = .float(sqlite3_column_double(stmt, i))
                 case SQLITE_TEXT:
                     value = .text(String(cString: sqlite3_column_text(stmt, i)))
-                case SQLITE_NULL:
-                    value = .null
-                default:
-                    value = .null
+                case SQLITE_BLOB where cname == "phasset":
+                    let raw = sqlite3_column_blob(stmt, i)
+                    let opaque = raw!.assumingMemoryBound(
+                        to: UnsafeRawPointer?.self
+                    ).pointee
+                    let asset = Unmanaged<PHAsset>.fromOpaque(opaque!)
+                        .takeRetainedValue()
+                    value = .phasset(asset)
+                case SQLITE_BLOB:
+                    let bytes = sqlite3_column_blob(stmt, i)
+                    let len = sqlite3_column_bytes(stmt, i)
+                    value = .blob(Data(bytes: bytes!, count: Int(len)))
+                default: value = .null
                 }
-                ordered.append((name, value))
+                out.append((cname, value))
             }
-            rows.append(Row(ordered))
+            rows.append(Row(out))
         }
         guard sqlite3_finalize(stmt) == SQLITE_OK else {
             fatalError(String(cString: sqlite3_errmsg(db)))

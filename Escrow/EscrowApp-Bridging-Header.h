@@ -6,3 +6,4 @@
 #import <sqlite3.h>
 
 int register_contacts_module(sqlite3 *db);
+int register_photos_module(sqlite3 *db);
