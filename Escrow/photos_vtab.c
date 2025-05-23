@@ -125,14 +125,21 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *x) {
         }
     }
 
-    /* LIMIT push-down (if struct supports nLimit) */
+    /* --- find optional LIMIT in the constraint array --- */
     int lim = 0;
-#ifdef SQLITE_INDEX_INFO_V2 /* struct version ≥2 includes nLimit */
-#if SQLITE_VERSION_NUMBER >= 3032000
-    if (x->nLimit)
-        lim = (int)*x->nLimit;
-#endif
-#endif
+    for (int i = 0; i < x->nConstraint; i++) {
+        struct sqlite3_index_constraint *c = &x->aConstraint[i];
+        if (!c->usable)
+            continue;
+        if (c->op == SQLITE_INDEX_CONSTRAINT_LIMIT) {
+            /* this term will become "LIMIT ?" at runtime */
+            lim = -1; /* -1 means “bind later” */
+            x->aConstraintUsage[i].argvIndex = argv++; /* next parameter */
+            x->aConstraintUsage[i].omit = 1;           /* SQLite can omit */
+            break;                                     /* only one LIMIT term */
+        }
+    }
+
     unsigned long m = (unsigned long)x->colUsed;
     x->idxStr = sqlite3_mprintf("%lx,%d", m, lim);
     x->needToFreeIdxStr = 1;
@@ -168,7 +175,6 @@ static int ptFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr,
                     int argc, sqlite3_value **argv) {
     PCsr *c = (PCsr *)cur;
     c->iRow = 0;
-    /* unpack idxStr "<mask>,<limit>"  – sscanf is OK (stdio.h included) */
     c->colMask = 0;
     c->limit = 0;
     if (idxStr)
@@ -185,6 +191,11 @@ static int ptFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr,
         c->zCid = strdup((const char *)sqlite3_value_text(argv[ai++]));
     if (idxNum & CNAME_EQ_BIT)
         c->zCname = strdup((const char *)sqlite3_value_text(argv[ai++]));
+    /* If xBestIndex found a LIMIT pseudo-constraint, it stored -1 in
+       idxStr and asked SQLite to bind the real value.  Replace it now. */
+    if (c->limit == -1 && ai < argc) {
+        c->limit = sqlite3_value_int(argv[ai++]);
+    }
 
     if (photos_vtab_prepare(c->zId, c->mediaEq, c->zCid, c->zCname, c->limit,
                             c->colMask, &c->h, &c->nRow))

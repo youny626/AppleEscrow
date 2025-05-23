@@ -71,6 +71,7 @@ func photos_vtab_prepare(
         opts.predicate = NSPredicate(format: "mediaType == %d", mtEq)
     }
     if limit > 0 {
+        print("photos fetch limit = \(limit)")
         opts.fetchLimit = Int(limit)
     }
 
