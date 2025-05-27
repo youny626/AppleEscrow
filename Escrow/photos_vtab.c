@@ -84,13 +84,13 @@ static int ptDisconnect(sqlite3_vtab *p) {
 #define ptDestroy ptDisconnect
 
 /* ---------- xBestIndex  (deterministic argv order) --------------------- */
-static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *x) {
+static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
     int idx = 0, argv = 1;
 
     /* enforce param order: id → type → collId → collName */
     for (int col = 0; col <= 4; col++) {
-        for (int i = 0; i < x->nConstraint; i++) {
-            struct sqlite3_index_constraint *c = &x->aConstraint[i];
+        for (int i = 0; i < pIdxInfo->nConstraint; i++) {
+            struct sqlite3_index_constraint *c = &pIdxInfo->aConstraint[i];
             if (!c->usable || c->iColumn != col)
                 continue;
 
@@ -122,44 +122,46 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *x) {
             default:
                 continue;
             }
-            x->aConstraintUsage[i].argvIndex = argv++;
-            x->aConstraintUsage[i].omit = 0; /* SQLite still re-filters */
+            pIdxInfo->aConstraintUsage[i].argvIndex = argv++;
+            pIdxInfo->aConstraintUsage[i].omit =
+                0; /* SQLite still re-filters */
         }
     }
 
     /* ---- ORDER BY creationDate push-down ---------------------------- */
-    if (x->nOrderBy == 1 &&            /* single term only            */
-        x->aOrderBy[0].iColumn == 2) { /* column 2 = creationDate     */
-        if (x->aOrderBy[0].desc)
+    if (pIdxInfo->nOrderBy == 1 &&            /* single term only            */
+        pIdxInfo->aOrderBy[0].iColumn == 2) { /* column 2 = creationDate     */
+        if (pIdxInfo->aOrderBy[0].desc)
             idx |= ORDER_DESC_BIT;
         else
             idx |= ORDER_ASC_BIT;
-        x->orderByConsumed = 1; /* SQLite can skip re-sorting  */
+        pIdxInfo->orderByConsumed = 1; /* SQLite can skip re-sorting  */
     }
 
     /* --- find optional LIMIT in the constraint array --- */
     int lim = 0;
-    for (int i = 0; i < x->nConstraint; i++) {
-        struct sqlite3_index_constraint *c = &x->aConstraint[i];
+    for (int i = 0; i < pIdxInfo->nConstraint; i++) {
+        struct sqlite3_index_constraint *c = &pIdxInfo->aConstraint[i];
         if (!c->usable)
             continue;
         if (c->op == SQLITE_INDEX_CONSTRAINT_LIMIT) {
             /* this term will become "LIMIT ?" at runtime */
             lim = -1; /* -1 means “bind later” */
-            x->aConstraintUsage[i].argvIndex = argv++; /* next parameter */
-            x->aConstraintUsage[i].omit = 1;           /* SQLite can omit */
-            break;                                     /* only one LIMIT term */
+            pIdxInfo->aConstraintUsage[i].argvIndex =
+                argv++;                             /* next parameter */
+            pIdxInfo->aConstraintUsage[i].omit = 1; /* SQLite can omit */
+            break;                                  /* only one LIMIT term */
         }
     }
 
-    unsigned long m = (unsigned long)x->colUsed;
-    x->idxStr = sqlite3_mprintf("%lx,%d,%d", m, lim,
-                                (idx & ORDER_DESC_BIT)  ? -1
-                                : (idx & ORDER_ASC_BIT) ? 1
-                                                        : 0);
-    x->needToFreeIdxStr = 1;
-    x->idxNum = idx;
-    x->estimatedCost = idx ? 300.0 : 1e9;
+    unsigned long m = (unsigned long)pIdxInfo->colUsed;
+    pIdxInfo->idxStr = sqlite3_mprintf("%lx,%d,%d", m, lim,
+                                       (idx & ORDER_DESC_BIT)  ? -1
+                                       : (idx & ORDER_ASC_BIT) ? 1
+                                                               : 0);
+    pIdxInfo->needToFreeIdxStr = 1;
+    pIdxInfo->idxNum = idx;
+    pIdxInfo->estimatedCost = idx ? 300.0 : 1e9;
     return SQLITE_OK;
 }
 

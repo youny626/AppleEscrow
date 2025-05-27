@@ -38,7 +38,7 @@ struct EscrowAppApp: App {
                 }
                 return rows.count
             }
-            print("Returned \(contactsCount) rows")
+            print("Returned \(contactsCount) contacts rows\n")
 
             let photosCount = Escrow.shared.run(
                 access:
@@ -60,7 +60,7 @@ struct EscrowAppApp: App {
                 }
                 return rows.count
             }
-            print("Returned \(photosCount) rows")
+            print("Returned \(photosCount) photos rows")
 
         }
     }
