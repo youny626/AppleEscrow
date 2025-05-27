@@ -152,6 +152,15 @@ public final class Escrow {
                     let asset = Unmanaged<PHAsset>.fromOpaque(opaque!)
                         .takeRetainedValue()
                     value = .phasset(asset)
+                case SQLITE_FLOAT where cname == "creationDate":
+                    value = .date(
+                        Date(
+                            timeIntervalSince1970: sqlite3_column_double(
+                                stmt,
+                                i
+                            )
+                        )
+                    )
                 case SQLITE_BLOB:
                     let bytes = sqlite3_column_blob(stmt, i)
                     let len = sqlite3_column_bytes(stmt, i)

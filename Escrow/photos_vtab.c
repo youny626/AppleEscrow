@@ -18,7 +18,7 @@ SQLITE_EXTENSION_INIT1
 
 /* -------- Swift bridge -------------------------------------------------- */
 extern int photos_vtab_prepare(const char *idEq, int mediaEq, const char *cidEq,
-                               const char *cnameEq, int limit,
+                               const char *cnameEq, int orderFlag, int limit,
                                unsigned long colMask, void **outHandle,
                                int *outRows);
 extern void photos_vtab_row(void *h, int row, const char **id, int *type,
@@ -31,6 +31,8 @@ extern void photos_vtab_release(void *h);
 #define TYPE_EQ_BIT 0x02
 #define CID_EQ_BIT 0x04
 #define CNAME_EQ_BIT 0x08
+#define ORDER_ASC_BIT 0x10
+#define ORDER_DESC_BIT 0x20
 
 /* -------- Row-projection mask bits (sync with Swift) -------------------- */
 #define COL_ID 0x01
@@ -125,6 +127,16 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *x) {
         }
     }
 
+    /* ---- ORDER BY creationDate push-down ---------------------------- */
+    if (x->nOrderBy == 1 &&            /* single term only            */
+        x->aOrderBy[0].iColumn == 2) { /* column 2 = creationDate     */
+        if (x->aOrderBy[0].desc)
+            idx |= ORDER_DESC_BIT;
+        else
+            idx |= ORDER_ASC_BIT;
+        x->orderByConsumed = 1; /* SQLite can skip re-sorting  */
+    }
+
     /* --- find optional LIMIT in the constraint array --- */
     int lim = 0;
     for (int i = 0; i < x->nConstraint; i++) {
@@ -141,7 +153,10 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *x) {
     }
 
     unsigned long m = (unsigned long)x->colUsed;
-    x->idxStr = sqlite3_mprintf("%lx,%d", m, lim);
+    x->idxStr = sqlite3_mprintf("%lx,%d,%d", m, lim,
+                                (idx & ORDER_DESC_BIT)  ? -1
+                                : (idx & ORDER_ASC_BIT) ? 1
+                                                        : 0);
     x->needToFreeIdxStr = 1;
     x->idxNum = idx;
     x->estimatedCost = idx ? 300.0 : 1e9;
@@ -175,10 +190,11 @@ static int ptFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr,
                     int argc, sqlite3_value **argv) {
     PCsr *c = (PCsr *)cur;
     c->iRow = 0;
+    int orderFlag = 0; /* 1 = ASC, –1 = DESC, 0 = none   */
     c->colMask = 0;
     c->limit = 0;
     if (idxStr)
-        sscanf(idxStr, "%lx,%d", &c->colMask, &c->limit);
+        sscanf(idxStr, "%lx,%d,%d", &c->colMask, &c->limit, &orderFlag);
 
     int ai = 0;
     if (idxNum & ID_EQ_BIT)
@@ -197,8 +213,8 @@ static int ptFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr,
         c->limit = sqlite3_value_int(argv[ai++]);
     }
 
-    if (photos_vtab_prepare(c->zId, c->mediaEq, c->zCid, c->zCname, c->limit,
-                            c->colMask, &c->h, &c->nRow))
+    if (photos_vtab_prepare(c->zId, c->mediaEq, c->zCid, c->zCname, orderFlag,
+                            c->limit, c->colMask, &c->h, &c->nRow))
         return SQLITE_ERROR;
     return SQLITE_OK;
 }

@@ -55,6 +55,7 @@ func photos_vtab_prepare(
     _ mtEq: Int32,
     _ cidEq: UnsafePointer<CChar>?,
     _ cnameEq: UnsafePointer<CChar>?,
+    _ orderFlag: Int32,
     _ limit: Int32,
     _ mask: UInt,
     _ outH: UnsafeMutablePointer<PhotosPtr?>!,
@@ -69,6 +70,14 @@ func photos_vtab_prepare(
     let opts = PHFetchOptions()
     if mtEq >= 0 {
         opts.predicate = NSPredicate(format: "mediaType == %d", mtEq)
+    }
+    if orderFlag != 0 {
+        opts.sortDescriptors = [
+            NSSortDescriptor(
+                key: "creationDate",
+                ascending: orderFlag > 0
+            )
+        ]
     }
     if limit > 0 {
         print("photos fetch limit = \(limit)")
