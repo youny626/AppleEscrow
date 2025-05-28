@@ -14,11 +14,7 @@ struct EscrowAppApp: App {
     init() {
 
         // Run the heavy work off the main thread
-        DispatchQueue.global(qos: .userInitiated).async(
-            group: nil,
-            qos: .userInitiated,
-            flags: []
-        ) {
+        DispatchQueue.global(qos: .userInitiated).async(qos: .userInitiated) {
             let contactsCount = Escrow.shared.run(
                 access:
                     //                                        "SELECT identifier, givenName, familyName, mainPhoneNumber FROM Contacts"
