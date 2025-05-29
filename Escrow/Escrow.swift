@@ -18,6 +18,7 @@ public enum CellValue {
     case date(Date)
     case blob(Data)
     case phasset(PHAsset)
+    case location(CLLocation)
     case null
     case custom(Any)
 }
@@ -38,6 +39,8 @@ extension CellValue {
         case .blob(let x):
             return x
         case .phasset(let x):
+            return x
+        case .location(let x):
             return x
         case .null:
             return nil
@@ -105,8 +108,12 @@ public final class Escrow {
             }
         }
 
+        /* Ensure LocationBuffer is initialised on the main thread */
+        _ = LocationBuffer.shared
+
         guard register_contacts_module(db) == SQLITE_OK,
-            register_photos_module(db) == SQLITE_OK
+            register_photos_module(db) == SQLITE_OK,
+            register_location_module(db) == SQLITE_OK
         else {
             fatalError(String(cString: sqlite3_errmsg(db)))
         }
@@ -114,7 +121,7 @@ public final class Escrow {
         guard
             sqlite3_exec(
                 db,
-                "CREATE VIRTUAL TABLE Contacts USING contacts_module; CREATE VIRTUAL TABLE Photos USING photos_module;",
+                "CREATE VIRTUAL TABLE Contacts USING contacts_module; CREATE VIRTUAL TABLE Photos USING photos_module; CREATE VIRTUAL TABLE Location USING location_module;",
                 nil,
                 nil,
                 nil
@@ -140,6 +147,16 @@ public final class Escrow {
                 switch ctype {
                 case SQLITE_INTEGER:
                     value = .int(sqlite3_column_int64(stmt, i))
+                case SQLITE_FLOAT
+                where (cname == "creationDate" || cname == "timestamp"):
+                    value = .date(
+                        Date(
+                            timeIntervalSince1970: sqlite3_column_double(
+                                stmt,
+                                i
+                            )
+                        )
+                    )
                 case SQLITE_FLOAT:
                     value = .float(sqlite3_column_double(stmt, i))
                 case SQLITE_TEXT:
@@ -152,15 +169,16 @@ public final class Escrow {
                     let asset = Unmanaged<PHAsset>.fromOpaque(opaque!)
                         .takeRetainedValue()
                     value = .phasset(asset)
-                case SQLITE_FLOAT where cname == "creationDate":
-                    value = .date(
-                        Date(
-                            timeIntervalSince1970: sqlite3_column_double(
-                                stmt,
-                                i
-                            )
-                        )
-                    )
+                case SQLITE_BLOB where cname == "location":
+                    let raw = sqlite3_column_blob(stmt, i)
+                    let opaque = raw!.assumingMemoryBound(
+                        to: UnsafeRawPointer?.self
+                    ).pointee
+                    let loc = Unmanaged<CLLocation>.fromOpaque(opaque!)
+                        .takeRetainedValue()
+                    value = .location(loc)
+                //                case SQLITE_FLOAT where cname == "timestamp":
+                //                    value = .float(sqlite3_column_double(stmt, i))
                 case SQLITE_BLOB:
                     let bytes = sqlite3_column_blob(stmt, i)
                     let len = sqlite3_column_bytes(stmt, i)

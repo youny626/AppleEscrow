@@ -7,3 +7,4 @@
 
 int register_contacts_module(sqlite3 *db);
 int register_photos_module(sqlite3 *db);
+int register_location_module(sqlite3 *db);

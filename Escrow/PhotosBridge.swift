@@ -20,27 +20,27 @@ private struct PhotosColMask {
 
 /* snapshot handed back to C */
 private final class PhotosHandle {
-    let ids, cids, cns: [String]
+    let ids, collectionIds, collectionNames: [String]
     let types: [Int]
     let dates: [Double]
     let assets: [PHAsset]
     let mask: UInt
     init(
         ids: [String],
-        t: [Int],
-        d: [Double],
-        cids: [String],
-        cns: [String],
-        a: [PHAsset],
-        m: UInt
+        types: [Int],
+        dates: [Double],
+        collectionIds: [String],
+        collectionNames: [String],
+        assets: [PHAsset],
+        mask: UInt
     ) {
         self.ids = ids
-        self.cids = cids
-        self.cns = cns
-        self.types = t
-        self.dates = d
-        self.assets = a
-        self.mask = m
+        self.types = types
+        self.dates = dates
+        self.collectionIds = collectionIds
+        self.collectionNames = collectionNames
+        self.assets = assets
+        self.mask = mask
     }
 }
 typealias PhotosPtr = OpaquePointer
@@ -150,12 +150,12 @@ func photos_vtab_prepare(
 
     let snap = PhotosHandle(
         ids: ids,
-        t: types,
-        d: dates,
-        cids: cids,
-        cns: cns,
-        a: assets,
-        m: mask
+        types: types,
+        dates: dates,
+        collectionIds: cids,
+        collectionNames: cns,
+        assets: assets,
+        mask: mask
     )
     outH.pointee = PhotosPtr(Unmanaged.passRetained(snap).toOpaque())
     outCnt.pointee = Int32(ids.count)
@@ -183,8 +183,10 @@ func photos_vtab_row(
     if s.mask & PhotosColMask.id != 0 { id.pointee = dup(s.ids[i]) }
     if s.mask & PhotosColMask.mtype != 0 { typ.pointee = Int32(s.types[i]) }
     if s.mask & PhotosColMask.date != 0 { dat.pointee = s.dates[i] }
-    if s.mask & PhotosColMask.cid != 0 { cid.pointee = dup(s.cids[i]) }
-    if s.mask & PhotosColMask.cname != 0 { cname.pointee = dup(s.cns[i]) }
+    if s.mask & PhotosColMask.cid != 0 { cid.pointee = dup(s.collectionIds[i]) }
+    if s.mask & PhotosColMask.cname != 0 {
+        cname.pointee = dup(s.collectionNames[i])
+    }
     if s.mask & PhotosColMask.asset != 0 {
         asset.pointee = UnsafeRawPointer(
             Unmanaged.passRetained(s.assets[i]).toOpaque()
