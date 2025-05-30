@@ -98,24 +98,28 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
             case 0:
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idx |= ID_EQ_BIT;
+                    pIdxInfo->aConstraintUsage[i].omit = 1;
                 } else
                     continue;
                 break;
             case 1:
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idx |= TYPE_EQ_BIT;
+                    pIdxInfo->aConstraintUsage[i].omit = 1;
                 } else
                     continue;
                 break;
             case 3:
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idx |= CID_EQ_BIT;
+                    pIdxInfo->aConstraintUsage[i].omit = 1;
                 } else
                     continue;
                 break;
             case 4:
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idx |= CNAME_EQ_BIT;
+                    pIdxInfo->aConstraintUsage[i].omit = 1;
                 } else
                     continue;
                 break;
@@ -123,8 +127,7 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
                 continue;
             }
             pIdxInfo->aConstraintUsage[i].argvIndex = argv++;
-            pIdxInfo->aConstraintUsage[i].omit =
-                0; /* SQLite still re-filters */
+            //            pIdxInfo->aConstraintUsage[i].omit = 0;
         }
     }
 
