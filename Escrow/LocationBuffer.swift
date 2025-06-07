@@ -57,7 +57,9 @@ final class LocationBuffer: NSObject, CLLocationManagerDelegate {
         print("didUpdateLocations")
         lock.lock()
         buf.append(contentsOf: locs)
-        if buf.count > cap { buf.removeFirst(buf.count - cap) }
+        if buf.count > cap {
+            buf.removeFirst(buf.count - cap)
+        }
         lock.unlock()
     }
 

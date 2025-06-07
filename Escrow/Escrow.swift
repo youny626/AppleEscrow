@@ -56,10 +56,13 @@ public struct Row: RandomAccessCollection, ExpressibleByDictionaryLiteral {
     public typealias Index = Int
     public var startIndex: Int { pairs.startIndex }
     public var endIndex: Int { pairs.endIndex }
+
     public subscript(position: Int) -> (key: String, value: CellValue) {
         pairs[position]
     }
-    public func index(after i: Int) -> Int { pairs.index(after: i) }
+    public func index(after i: Int) -> Int {
+        pairs.index(after: i)
+    }
 
     public subscript(key: String) -> Any? {
         pairs.first { $0.key == key }?.value.any
@@ -73,7 +76,9 @@ public struct Row: RandomAccessCollection, ExpressibleByDictionaryLiteral {
         self.pairs = elements
     }
 
-    init(_ pairs: [(String, CellValue)]) { self.pairs = pairs }
+    init(_ pairs: [(String, CellValue)]) {
+        self.pairs = pairs
+    }
 }
 
 extension Row {
@@ -139,11 +144,12 @@ public final class Escrow {
 
         var rows: [Row] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            var out: [(String, CellValue)] = []
+            var row: [(String, CellValue)] = []
             for i in 0..<sqlite3_column_count(stmt) {
                 let cname = String(cString: sqlite3_column_name(stmt, i))
                 let ctype = sqlite3_column_type(stmt, i)
                 let value: CellValue
+
                 switch ctype {
                 case SQLITE_INTEGER:
                     value = .int(sqlite3_column_int64(stmt, i))
@@ -185,9 +191,9 @@ public final class Escrow {
                     value = .blob(Data(bytes: bytes!, count: Int(len)))
                 default: value = .null
                 }
-                out.append((cname, value))
+                row.append((cname, value))
             }
-            rows.append(Row(out))
+            rows.append(Row(row))
         }
         guard sqlite3_finalize(stmt) == SQLITE_OK else {
             fatalError(String(cString: sqlite3_errmsg(db)))

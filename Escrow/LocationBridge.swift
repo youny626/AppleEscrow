@@ -43,6 +43,7 @@ typealias LocationPtr = OpaquePointer
 /* ---------------------------------------------------------------------- */
 @_cdecl("location_vtab_prepare")
 func location_vtab_prepare(
+    _ orderFlag: Int32, /* 1 ASC, -1 DESC, 0 none   */
     _ limit: Int32,
     _ mask: UInt,
     _ outH: UnsafeMutablePointer<LocationPtr?>!,
@@ -51,7 +52,18 @@ func location_vtab_prepare(
 
     var slice = LocationBuffer.shared.snapshot()
 
-    /* LIMIT push-down */
+    //    if orderFlag != 0 {
+    //        slice.sort { a, b in
+    //            orderFlag > 0
+    //                ? a.timestamp < b.timestamp
+    //                : a.timestamp > b.timestamp
+    //        }
+    //    }
+    if orderFlag == -1 {
+        print("order by pushdown")
+        slice.reverse()
+    }
+
     if limit > 0, slice.count > limit {
         slice.removeLast(slice.count - Int(limit))
     }

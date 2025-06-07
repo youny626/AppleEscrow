@@ -17,7 +17,7 @@ SQLITE_EXTENSION_INIT1
 #define ZERO(p) memset((p), 0, sizeof(*(p)))
 
 /* Swift bridge ----------------------------------------------------------*/
-extern int location_vtab_prepare(int limit, unsigned long mask,
+extern int location_vtab_prepare(int orderFlag, int limit, unsigned long mask,
                                  void **outHandle, int *outRows);
 extern void location_vtab_row(void *h, int row, double *ts, double *lat,
                               double *lon, double *acc, const void **locPtr);
@@ -38,6 +38,7 @@ typedef struct {
     sqlite3_vtab_cursor base;
     void *h;
     int nRow, iRow;
+    int orderFlag;
     int limit;
     unsigned long mask;
 } LCsr;
@@ -67,29 +68,34 @@ static int lDisconnect(sqlite3_vtab *p) {
 }
 #define lDestroy lDisconnect
 
-/* xBestIndex – only LIMIT push-down ------------------------------------*/
 static int lBest(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
-    int argv = 1;
-    int lim = 0;
+    int argv = 1, limit = 0, orderFlag = 0;
+
+    /* recognise ORDER BY timestamp           */
+    if (pIdxInfo->nOrderBy == 1 && pIdxInfo->aOrderBy[0].iColumn == 0) {
+        orderFlag = pIdxInfo->aOrderBy[0].desc ? -1 : 1; /* -1 DESC, +1 ASC */
+        pIdxInfo->orderByConsumed = 1;
+    }
+
+    /* recognise LIMIT pseudo-constraint      */
     for (int i = 0; i < pIdxInfo->nConstraint; i++) {
         struct sqlite3_index_constraint *c = &pIdxInfo->aConstraint[i];
         if (!c->usable)
             continue;
         if (c->op == SQLITE_INDEX_CONSTRAINT_LIMIT) {
-            /* this term will become "LIMIT ?" at runtime */
-            lim = -1; /* -1 means “bind later” */
-            pIdxInfo->aConstraintUsage[i].argvIndex =
-                argv++;                             /* next parameter */
-            pIdxInfo->aConstraintUsage[i].omit = 1; /* SQLite can omit */
-            break;                                  /* only one LIMIT term */
+            limit = -1; /* placeholder */
+            pIdxInfo->aConstraintUsage[i].argvIndex = argv++;
+            pIdxInfo->aConstraintUsage[i].omit = 1;
+            break;
         }
     }
 
-    unsigned long m = (unsigned long)pIdxInfo->colUsed;
-    pIdxInfo->idxStr = sqlite3_mprintf("%lx,%d", m, lim);
+    /* idxStr encodes: "<mask>,<limit>,<orderFlag>" */
+    unsigned long mask = (unsigned long)pIdxInfo->colUsed;
+    pIdxInfo->idxStr = sqlite3_mprintf("%lx,%d,%d", mask, limit, orderFlag);
     pIdxInfo->needToFreeIdxStr = 1;
-    pIdxInfo->idxNum = 0;          /* no constraint bits */
-    pIdxInfo->estimatedCost = 5.0; /* cheap */
+    pIdxInfo->idxNum = 0; /* no other constraints */
+    pIdxInfo->estimatedCost = 5.0;
     return SQLITE_OK;
 }
 
@@ -119,17 +125,15 @@ static int lFilter(sqlite3_vtab_cursor *cur, int idx, const char *idxStr,
     c->iRow = 0;
     c->mask = 0;
     c->limit = 0;
+    c->orderFlag = 0;
     if (idxStr)
-        sscanf(idxStr, "%lx,%d", &c->mask, &c->limit);
+        sscanf(idxStr, "%lx,%d,%d", &c->mask, &c->limit, &c->orderFlag);
 
     int ai = 0;
-    /* If xBestIndex found a LIMIT pseudo-constraint, it stored -1 in
-       idxStr and asked SQLite to bind the real value.  Replace it now. */
-    if (c->limit == -1 && ai < argc) {
+    if (c->limit == -1 && ai < argc)
         c->limit = sqlite3_value_int(argv[ai++]);
-    }
 
-    if (location_vtab_prepare(c->limit, c->mask, &c->h, &c->nRow))
+    if (location_vtab_prepare(c->orderFlag, c->limit, c->mask, &c->h, &c->nRow))
         return SQLITE_ERROR;
     return SQLITE_OK;
 }
