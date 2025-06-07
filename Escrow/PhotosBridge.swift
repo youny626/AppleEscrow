@@ -180,17 +180,25 @@ func photos_vtab_row(
     let i = Int(idx)
     if i >= s.ids.count { return }
 
-    if s.mask & PhotosColMask.id != 0 { id.pointee = dup(s.ids[i]) }
-    if s.mask & PhotosColMask.mtype != 0 { typ.pointee = Int32(s.types[i]) }
-    if s.mask & PhotosColMask.date != 0 { dat.pointee = s.dates[i] }
-    if s.mask & PhotosColMask.cid != 0 { cid.pointee = dup(s.collectionIds[i]) }
+    if s.mask & PhotosColMask.id != 0 {
+        id.pointee = dup(s.ids[i])
+    }
+    if s.mask & PhotosColMask.mtype != 0 {
+        typ.pointee = Int32(s.types[i])
+    }
+    if s.mask & PhotosColMask.date != 0 {
+        dat.pointee = s.dates[i]
+    }
+    if s.mask & PhotosColMask.cid != 0 {
+        cid.pointee = dup(s.collectionIds[i])
+    }
     if s.mask & PhotosColMask.cname != 0 {
         cname.pointee = dup(s.collectionNames[i])
     }
     if s.mask & PhotosColMask.asset != 0 {
         asset.pointee = UnsafeRawPointer(
             Unmanaged.passRetained(s.assets[i]).toOpaque()
-        )  // ← FIX
+        )
     }
 }
 
