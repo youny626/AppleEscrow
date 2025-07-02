@@ -30,6 +30,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		430A3E9E2E15DAD600C0423B /* Escrow-vtab-no-pushdown */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Escrow-vtab-no-pushdown";
+			sourceTree = "<group>";
+		};
 		432CC6362DCC86430021B981 /* EscrowApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = EscrowApp;
@@ -80,6 +85,7 @@
 		432CC62B2DCC86430021B981 = {
 			isa = PBXGroup;
 			children = (
+				430A3E9E2E15DAD600C0423B /* Escrow-vtab-no-pushdown */,
 				432CC65F2DCC87410021B981 /* Escrow */,
 				432CC6362DCC86430021B981 /* EscrowApp */,
 				432CC6452DCC86450021B981 /* EscrowAppTests */,
@@ -114,8 +120,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				430A3E9E2E15DAD600C0423B /* Escrow-vtab-no-pushdown */,
 				432CC6362DCC86430021B981 /* EscrowApp */,
-				432CC65F2DCC87410021B981 /* Escrow */,
 			);
 			name = EscrowApp;
 			packageProductDependencies = (

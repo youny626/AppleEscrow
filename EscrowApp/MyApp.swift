@@ -56,13 +56,13 @@ struct EscrowApp: App {
         }
         print("Returned \(photosCount) photos rows\n")
 
-//        _ = Escrow.shared
+        //        _ = Escrow.shared
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             let locationCount = Escrow.shared.run(
                 access:
-//                    "SELECT timestamp, latitude, longitude, location FROM Location LIMIT 3"
-                "SELECT * FROM Location ORDER BY timestamp DESC LIMIT 3"
+                    //                    "SELECT timestamp, latitude, longitude, location FROM Location LIMIT 3"
+                    "SELECT * FROM Location ORDER BY timestamp DESC LIMIT 3"
             ) { rows in
                 rows.forEach { r in
                     let t = r["timestamp"] as! Date
