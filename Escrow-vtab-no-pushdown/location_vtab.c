@@ -130,5 +130,5 @@ static const sqlite3_module mod = {
     0,        0,        0,        0,     0,           0,        0,
     0,        0};
 int register_location_module(sqlite3 *db) {
-    return sqlite3_create_module(db, "location_module", &mod, 0);
+    return sqlite3_create_module(db, "location_module_no_pushdown", &mod, 0);
 }

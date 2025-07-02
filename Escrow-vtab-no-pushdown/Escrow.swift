@@ -126,7 +126,7 @@ public final class Escrow {
         guard
             sqlite3_exec(
                 db,
-                "CREATE VIRTUAL TABLE Contacts USING contacts_module_no_pushdown; CREATE VIRTUAL TABLE Photos USING photos_module_no_pushdown; CREATE VIRTUAL TABLE Location USING location_module;",
+                "CREATE VIRTUAL TABLE Contacts USING contacts_module_no_pushdown; CREATE VIRTUAL TABLE Photos USING photos_module_no_pushdown; CREATE VIRTUAL TABLE Location USING location_module_no_pushdown;",
                 nil,
                 nil,
                 nil
