@@ -11,7 +11,6 @@ SQLITE_EXTENSION_INIT1
 #include <stdlib.h>
 #include <string.h>
 
-/***********************  Swift bridge symbols  ***************************/
 extern int contacts_vtab_prepare(const char *idEq, const char *givenPrefix,
                                  const char *familyPrefix, const char *phoneEq,
                                  unsigned long colMask, void **outHandle,
@@ -21,13 +20,12 @@ extern void contacts_vtab_row(void *handle, int rowIndex, const char **outId,
                               const char **outPhone);
 extern void contacts_vtab_release(void *handle);
 
-/*****************************  Helpers  *********************************/
 #define VTAB_OK SQLITE_OK
 #define MALLOC(N) sqlite3_malloc64(N)
 #define FREE(P) sqlite3_free(P)
 #define ZERO(P) memset((P), 0, sizeof(*(P)))
 
-/* idxNum bit‑flags */
+// idxNum bit‑flags
 #define IDX_ID_EQ 0x01
 #define IDX_GIVEN_EQ 0x02
 #define IDX_GIVEN_PREFIX 0x04
@@ -35,7 +33,6 @@ extern void contacts_vtab_release(void *handle);
 #define IDX_FAMILY_PREFIX 0x10
 #define IDX_PHONE_EQ 0x20
 
-/************************  Object definitions  ***************************/
 typedef struct ContactsTab ContactsTab;
 typedef struct ContactsCsr ContactsCsr;
 
@@ -55,7 +52,6 @@ struct ContactsCsr {
     unsigned long colMask; /* Projection bitmask  */
 };
 
-/************************  xCreate / xConnect  ***************************/
 static int ctConnect(sqlite3 *db, void *pAux, int argc, const char *const *argv,
                      sqlite3_vtab **ppVtab, char **pzErr) {
     const char *schema = "CREATE TABLE x("
@@ -78,14 +74,13 @@ static int ctDisconnect(sqlite3_vtab *p) {
     FREE(p);
     return VTAB_OK;
 }
-#define ctDestroy ctDisconnect /* identical implementation */
+#define ctDestroy ctDisconnect
 
-/***************************  xBestIndex  ********************************/
 static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
     int idxNum = 0;
     int argv = 1; /* 1-based */
 
-    /* Pass 0-3: force columns in the order   id → given → family → phone */
+    // Pass 0-3: force columns in the order id → given → family → phone
     for (int col = 0; col <= 3; col++) {
         for (int i = 0; i < pIdx->nConstraint; i++) {
             struct sqlite3_index_constraint *c = &pIdx->aConstraint[i];
@@ -93,14 +88,14 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
                 continue;
 
             switch (col) {
-            case 0: /* identifier = ? */
+            case 0: // identifier = ?
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idxNum |= IDX_ID_EQ;
                 } else
                     continue;
                 break;
 
-            case 1: /* givenName = ?  or LIKE ? */
+            case 1: // givenName = ? or LIKE ?
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idxNum |= IDX_GIVEN_EQ;
                 } else if (c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
@@ -109,7 +104,7 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
                     continue;
                 break;
 
-            case 2: /* familyName = ? or LIKE ? */
+            case 2: // familyName = ? or LIKE ?
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idxNum |= IDX_FAMILY_EQ;
                 } else if (c->op == SQLITE_INDEX_CONSTRAINT_LIKE) {
@@ -118,7 +113,7 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
                     continue;
                 break;
 
-            case 3: /* mainPhoneNumber = ? */
+            case 3: // mainPhoneNumber = ?
                 if (c->op == SQLITE_INDEX_CONSTRAINT_EQ) {
                     idxNum |= IDX_PHONE_EQ;
                 } else
@@ -126,13 +121,12 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
                 break;
             }
 
-            /* record where SQLite should bind this parameter */
+            // record where SQLite should bind this parameter
             pIdx->aConstraintUsage[i].argvIndex = argv++;
-            pIdx->aConstraintUsage[i].omit = 0; /* SQLite still re-filters */
+            pIdx->aConstraintUsage[i].omit = 0;
         }
     }
 
-    /* projection mask → idxStr (unchanged) */
     unsigned long colMask = (unsigned long)pIdx->colUsed;
     pIdx->idxStr = sqlite3_mprintf("%lx", colMask);
     pIdx->needToFreeIdxStr = 1;
@@ -141,7 +135,6 @@ static int ctBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pIdx) {
     return SQLITE_OK;
 }
 
-/*****************************  Cursor  **********************************/
 static ContactsCsr *csrNew(void) {
     ContactsCsr *c = (ContactsCsr *)MALLOC(sizeof(*c));
     if (c)
@@ -164,7 +157,6 @@ static int ctClose(sqlite3_vtab_cursor *pCsr) {
     return VTAB_OK;
 }
 
-/******************************  xFilter  *********************************/
 static int ctFilter(sqlite3_vtab_cursor *pCsr, int idxNum, const char *idxStr,
                     int argc, sqlite3_value **argv) {
     ContactsCsr *c = (ContactsCsr *)pCsr;
@@ -197,7 +189,6 @@ static int ctEof(sqlite3_vtab_cursor *pCsr) {
     return c->iRow >= c->nRow;
 }
 
-/***************************  xColumn / xRowid  ***************************/
 static int ctColumn(sqlite3_vtab_cursor *pCsr, sqlite3_context *ctx, int iCol) {
     ContactsCsr *c = (ContactsCsr *)pCsr;
     const char *id = "", *gn = "", *fn = "", *ph = "";
@@ -215,20 +206,12 @@ static int ctRowid(sqlite3_vtab_cursor *pCsr, sqlite3_int64 *pRowid) {
     return VTAB_OK;
 }
 
-/******************************  Module  ***********************************/
 static const sqlite3_module ContactsModule = {
-    0,           ctConnect, /* xCreate  */
-    ctConnect,              /* xConnect */
-    ctBestIndex, ctDisconnect,
-    ctDestroy,   ctOpen,
-    ctClose,     ctFilter,
-    ctNext,      ctEof,
-    ctColumn,    ctRowid,
-    0,           0,
-    0,           0,
-    0,           0,
-    0,           0,
-    0,           0};
+    0,         ctConnect, ctConnect, ctBestIndex, ctDisconnect,
+    ctDestroy, ctOpen,    ctClose,   ctFilter,    ctNext,
+    ctEof,     ctColumn,  ctRowid,   0,           0,
+    0,         0,         0,         0,           0,
+    0,         0,         0};
 
 int register_contacts_module(sqlite3 *db) {
     return sqlite3_create_module(db, "contacts_module", &ContactsModule, 0);

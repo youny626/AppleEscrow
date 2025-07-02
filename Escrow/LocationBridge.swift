@@ -8,7 +8,6 @@
 import CoreLocation
 import Foundation
 
-/* projection bits (must match C) */
 private struct LocationColMask {
     static let ts: UInt = 1 << 0
     static let lat: UInt = 1 << 1
@@ -17,7 +16,6 @@ private struct LocationColMask {
     static let loc: UInt = 1 << 4
 }
 
-/* snapshot handed to C */
 private final class LocationHandle {
     let ts, lat, lon, acc: [Double]
     let locs: [CLLocation]
@@ -40,10 +38,9 @@ private final class LocationHandle {
 }
 typealias LocationPtr = OpaquePointer
 
-/* ---------------------------------------------------------------------- */
 @_cdecl("location_vtab_prepare")
 func location_vtab_prepare(
-    _ orderFlag: Int32, /* 1 ASC, -1 DESC, 0 none   */
+    _ orderFlag: Int32, // 1 ASC, -1 DESC, 0 none
     _ limit: Int32,
     _ mask: UInt,
     _ outH: UnsafeMutablePointer<LocationPtr?>!,
@@ -68,7 +65,6 @@ func location_vtab_prepare(
         slice.removeLast(slice.count - Int(limit))
     }
 
-    /* build column arrays */
     var ts: [Double] = []
     var lat: [Double] = []
     var lon: [Double] = []
@@ -106,10 +102,9 @@ func location_vtab_prepare(
     return 0
 }
 
-/* ---------------------------------------------------------------------- */
 @_cdecl("location_vtab_row")
 func location_vtab_row(
-    _ h: LocationPtr?,
+    _ ptr: LocationPtr?,
     _ idx: Int32,
     _ ts: UnsafeMutablePointer<Double>!,
     _ lat: UnsafeMutablePointer<Double>!,
@@ -117,8 +112,8 @@ func location_vtab_row(
     _ acc: UnsafeMutablePointer<Double>!,
     _ loc: UnsafeMutablePointer<UnsafeRawPointer?>!
 ) {
-    guard let h else { return }
-    let s = Unmanaged<LocationHandle>.fromOpaque(UnsafeRawPointer(h))
+    guard let ptr else { return }
+    let s = Unmanaged<LocationHandle>.fromOpaque(UnsafeRawPointer(ptr))
         .takeUnretainedValue()
     let i = Int(idx)
     if i >= s.locs.count { return }

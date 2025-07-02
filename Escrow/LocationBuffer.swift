@@ -7,7 +7,6 @@
 
 import CoreLocation
 
-/// Thread-safe ring buffer for the most-recent 256 locations.
 final class LocationBuffer: NSObject, CLLocationManagerDelegate {
     static let shared = LocationBuffer()
 
@@ -70,10 +69,9 @@ final class LocationBuffer: NSObject, CLLocationManagerDelegate {
         fatalError(error.localizedDescription)
     }
 
-    /// Immutable snapshot the virtual table can read safely.
     func snapshot() -> [CLLocation] {
         lock.lock()
         defer { lock.unlock() }
-        return buf  // value-type copy
+        return buf
     }
 }

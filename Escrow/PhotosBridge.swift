@@ -8,7 +8,6 @@
 import Foundation
 import Photos
 
-/* bit-mask (must match photos_vtab.c) */
 private struct PhotosColMask {
     static let id: UInt = 1 << 0
     static let mtype: UInt = 1 << 1
@@ -18,7 +17,6 @@ private struct PhotosColMask {
     static let asset: UInt = 1 << 5
 }
 
-/* snapshot handed back to C */
 private final class PhotosHandle {
     let ids, collectionIds, collectionNames: [String]
     let types: [Int]
@@ -48,7 +46,6 @@ private func dup(_ s: String) -> UnsafePointer<CChar>? {
     strdup(s).map { UnsafePointer($0) }
 }
 
-/* ---------------------------------------------------------------------- */
 @_cdecl("photos_vtab_prepare")
 func photos_vtab_prepare(
     _ idEq: UnsafePointer<CChar>?,
@@ -66,7 +63,6 @@ func photos_vtab_prepare(
     let collId = cidEq.flatMap { String(cString: $0) }
     let collName = cnameEq.flatMap { String(cString: $0) }
 
-    /* build fetch options */
     let opts = PHFetchOptions()
     if mtEq >= 0 {
         opts.predicate = NSPredicate(format: "mediaType == %d", mtEq)
@@ -93,7 +89,6 @@ func photos_vtab_prepare(
             .firstObject
     }
 
-    /* choose fetch method */
     let fetch: PHFetchResult<PHAsset>
     if let id = id {
         print("Fetching asset id = \(id) with options \(opts.debugDescription)")
@@ -118,7 +113,6 @@ func photos_vtab_prepare(
         fetch = PHAsset.fetchAssets(with: opts)
     }
 
-    /* materialise snapshot ------------------------------------------------*/
     var ids: [String] = []
     var types: [Int] = []
     var dates: [Double] = []
@@ -162,10 +156,9 @@ func photos_vtab_prepare(
     return 0
 }
 
-/* ---------------------------------------------------------------------- */
 @_cdecl("photos_vtab_row")
 func photos_vtab_row(
-    _ h: PhotosPtr?,
+    _ ptr: PhotosPtr?,
     _ idx: Int32,
     _ id: UnsafeMutablePointer<UnsafePointer<CChar>?>!,
     _ typ: UnsafeMutablePointer<Int32>!,
@@ -174,8 +167,8 @@ func photos_vtab_row(
     _ cname: UnsafeMutablePointer<UnsafePointer<CChar>?>!,
     _ asset: UnsafeMutablePointer<UnsafeRawPointer?>!
 ) {
-    guard let h else { return }
-    let s = Unmanaged<PhotosHandle>.fromOpaque(UnsafeRawPointer(h))
+    guard let ptr else { return }
+    let s = Unmanaged<PhotosHandle>.fromOpaque(UnsafeRawPointer(ptr))
         .takeUnretainedValue()
     let i = Int(idx)
     if i >= s.ids.count { return }
@@ -202,7 +195,6 @@ func photos_vtab_row(
     }
 }
 
-/* ---------------------------------------------------------------------- */
 @_cdecl("photos_vtab_release")
 func photos_vtab_release(_ h: PhotosPtr?) {
     if let h {

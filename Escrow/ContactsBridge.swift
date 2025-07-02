@@ -43,7 +43,6 @@ private func dupCString(_ str: String) -> UnsafePointer<CChar>? {
     return UnsafePointer<CChar>(dup)
 }
 
-// MARK: contacts_vtab_prepare
 @_cdecl("contacts_vtab_prepare")
 func contacts_vtab_prepare(
     _ idC: UnsafePointer<CChar>?,
@@ -184,7 +183,6 @@ func contacts_vtab_prepare(
     return 0
 }
 
-// MARK: contacts_vtab_row ----------------------------------------------------
 @_cdecl("contacts_vtab_row")
 func contacts_vtab_row(
     _ handlePtr: ContactsHandlePtr?,
@@ -221,7 +219,6 @@ func contacts_vtab_row(
         : nil
 }
 
-// MARK: contacts_vtab_release ------------------------------------------------
 @_cdecl("contacts_vtab_release")
 func contacts_vtab_release(_ handlePtr: ContactsHandlePtr?) {
     if let handlePtr = handlePtr {

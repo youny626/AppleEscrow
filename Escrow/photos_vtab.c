@@ -16,7 +16,6 @@ SQLITE_EXTENSION_INIT1
 #define FREE(p) sqlite3_free(p)
 #define ZERO(p) memset((p), 0, sizeof(*(p)))
 
-/* -------- Swift bridge -------------------------------------------------- */
 extern int photos_vtab_prepare(const char *idEq, int mediaEq, const char *cidEq,
                                const char *cnameEq, int orderFlag, int limit,
                                unsigned long colMask, void **outHandle,
@@ -26,7 +25,6 @@ extern void photos_vtab_row(void *h, int row, const char **id, int *type,
                             const void **assetPtr);
 extern void photos_vtab_release(void *h);
 
-/* -------- idxNum bits --------------------------------------------------- */
 #define ID_EQ_BIT 0x01
 #define TYPE_EQ_BIT 0x02
 #define CID_EQ_BIT 0x04
@@ -34,7 +32,6 @@ extern void photos_vtab_release(void *h);
 #define ORDER_ASC_BIT 0x10
 #define ORDER_DESC_BIT 0x20
 
-/* -------- Row-projection mask bits (sync with Swift) -------------------- */
 #define COL_ID 0x01
 #define COL_TYPE 0x02
 #define COL_DATE 0x04
@@ -42,21 +39,19 @@ extern void photos_vtab_release(void *h);
 #define COL_CNAME 0x10
 #define COL_ASSET 0x20
 
-/* ------------------------------------------------------------------------ */
 typedef struct {
     sqlite3_vtab base;
 } PTab;
 
 typedef struct {
     sqlite3_vtab_cursor base;
-    void *h;
+    void *ptr;
     int nRow, iRow;
     char *zId, *zCid, *zCname;
     int mediaEq, limit;
     unsigned long colMask;
 } PCsr;
 
-/* ---------- xCreate / xConnect ----------------------------------------- */
 static int ptConnect(sqlite3 *db, void *aux, int argc, const char *const *argv,
                      sqlite3_vtab **pp, char **err) {
     const char *schema = "CREATE TABLE x("
@@ -83,11 +78,10 @@ static int ptDisconnect(sqlite3_vtab *p) {
 }
 #define ptDestroy ptDisconnect
 
-/* ---------- xBestIndex  (deterministic argv order) --------------------- */
 static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
     int idx = 0, argv = 1;
 
-    /* enforce param order: id → type → collId → collName */
+    // enforce param order: id → type → collId → collName
     for (int col = 0; col <= 4; col++) {
         for (int i = 0; i < pIdxInfo->nConstraint; i++) {
             struct sqlite3_index_constraint *c = &pIdxInfo->aConstraint[i];
@@ -131,29 +125,26 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
         }
     }
 
-    /* ---- ORDER BY creationDate push-down ---------------------------- */
-    if (pIdxInfo->nOrderBy == 1 &&            /* single term only            */
-        pIdxInfo->aOrderBy[0].iColumn == 2) { /* column 2 = creationDate     */
+    // ---- ORDER BY creationDate push-down
+    if (pIdxInfo->nOrderBy == 1 &&
+        pIdxInfo->aOrderBy[0].iColumn == 2) { // column 2 = creationDate
         if (pIdxInfo->aOrderBy[0].desc)
             idx |= ORDER_DESC_BIT;
         else
             idx |= ORDER_ASC_BIT;
-        pIdxInfo->orderByConsumed = 1; /* SQLite can skip re-sorting  */
+        pIdxInfo->orderByConsumed = 1; // SQLite can skip re-sorting
     }
 
-    /* --- find optional LIMIT in the constraint array --- */
     int lim = 0;
     for (int i = 0; i < pIdxInfo->nConstraint; i++) {
         struct sqlite3_index_constraint *c = &pIdxInfo->aConstraint[i];
         if (!c->usable)
             continue;
         if (c->op == SQLITE_INDEX_CONSTRAINT_LIMIT) {
-            /* this term will become "LIMIT ?" at runtime */
-            lim = -1; /* -1 means “bind later” */
-            pIdxInfo->aConstraintUsage[i].argvIndex =
-                argv++;                             /* next parameter */
-            pIdxInfo->aConstraintUsage[i].omit = 1; /* SQLite can omit */
-            break;                                  /* only one LIMIT term */
+            lim = -1; // bind later
+            pIdxInfo->aConstraintUsage[i].argvIndex = argv++;
+            pIdxInfo->aConstraintUsage[i].omit = 1;
+            break;
         }
     }
 
@@ -168,7 +159,6 @@ static int ptBestIndex(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
     return SQLITE_OK;
 }
 
-/* ---------- cursor helpers -------------------------------------------- */
 static PCsr *csrNew(void) {
     PCsr *c = MALLOC(sizeof(*c));
     if (c)
@@ -181,8 +171,8 @@ static int ptOpen(sqlite3_vtab *pVtab, sqlite3_vtab_cursor **pp) {
 }
 static int ptClose(sqlite3_vtab_cursor *cur) {
     PCsr *c = (PCsr *)cur;
-    if (c->h)
-        photos_vtab_release(c->h);
+    if (c->ptr)
+        photos_vtab_release(c->ptr);
     FREE(c->zId);
     FREE(c->zCid);
     FREE(c->zCname);
@@ -190,12 +180,11 @@ static int ptClose(sqlite3_vtab_cursor *cur) {
     return SQLITE_OK;
 }
 
-/* ---------- xFilter ---------------------------------------------------- */
 static int ptFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr,
                     int argc, sqlite3_value **argv) {
     PCsr *c = (PCsr *)cur;
     c->iRow = 0;
-    int orderFlag = 0; /* 1 = ASC, –1 = DESC, 0 = none   */
+    int orderFlag = 0; // 1 = ASC, –1 = DESC, 0 = none
     c->colMask = 0;
     c->limit = 0;
     if (idxStr)
@@ -212,14 +201,14 @@ static int ptFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr,
         c->zCid = strdup((const char *)sqlite3_value_text(argv[ai++]));
     if (idxNum & CNAME_EQ_BIT)
         c->zCname = strdup((const char *)sqlite3_value_text(argv[ai++]));
-    /* If xBestIndex found a LIMIT pseudo-constraint, it stored -1 in
-       idxStr and asked SQLite to bind the real value.  Replace it now. */
+    /* If xBestIndex found a LIMIT constraint, it already stored -1 in
+       idxStr and asked SQLite to bind the real value. Replace it now. */
     if (c->limit == -1 && ai < argc) {
         c->limit = sqlite3_value_int(argv[ai++]);
     }
 
     if (photos_vtab_prepare(c->zId, c->mediaEq, c->zCid, c->zCname, orderFlag,
-                            c->limit, c->colMask, &c->h, &c->nRow))
+                            c->limit, c->colMask, &c->ptr, &c->nRow))
         return SQLITE_ERROR;
     return SQLITE_OK;
 }
@@ -232,10 +221,8 @@ static int ptEof(sqlite3_vtab_cursor *cur) {
     return c->iRow >= c->nRow;
 }
 
-/* ---------- xColumn / xRowid ----------------------------------------- */
 static int ptColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col) {
     PCsr *c = (PCsr *)cur;
-    /* initialise pointers to NULL so SQLite sees real NULLs */
     const char *id = NULL;
     const char *cid = NULL;
     const char *cname = NULL;
@@ -243,7 +230,7 @@ static int ptColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col) {
     double date = 0;
     const void *asset = NULL;
 
-    photos_vtab_row(c->h, c->iRow, &id, &type, &date, &cid, &cname, &asset);
+    photos_vtab_row(c->ptr, c->iRow, &id, &type, &date, &cid, &cname, &asset);
 
     switch (col) {
     case 0:
@@ -269,7 +256,6 @@ static int ptColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col) {
         break;
     }
 
-    /* Only free if we allocated (i.e. if column was requested) */
     if ((c->colMask & COL_ID) && id)
         free((void *)id);
     if ((c->colMask & COL_CID) && cid)
@@ -284,7 +270,6 @@ static int ptRowid(sqlite3_vtab_cursor *cur, sqlite3_int64 *rid) {
     return SQLITE_OK;
 }
 
-/* ---------- module descriptor ---------------------------------------- */
 static const sqlite3_module PhotosModule = {
     0,         ptConnect, ptConnect, ptBestIndex, ptDisconnect,
     ptDestroy, ptOpen,    ptClose,   ptFilter,    ptNext,

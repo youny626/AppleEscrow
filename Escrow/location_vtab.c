@@ -16,42 +16,38 @@ SQLITE_EXTENSION_INIT1
 #define FREE(p) sqlite3_free(p)
 #define ZERO(p) memset((p), 0, sizeof(*(p)))
 
-/* Swift bridge ----------------------------------------------------------*/
 extern int location_vtab_prepare(int orderFlag, int limit, unsigned long mask,
                                  void **outHandle, int *outRows);
 extern void location_vtab_row(void *h, int row, double *ts, double *lat,
                               double *lon, double *acc, const void **locPtr);
 extern void location_vtab_release(void *h);
 
-/* column mask (sync with Swift) */
 #define COL_TS 0x01
 #define COL_LAT 0x02
 #define COL_LON 0x04
 #define COL_ACC 0x08
 #define COL_LOC 0x10
 
-/* structs ---------------------------------------------------------------*/
 typedef struct {
     sqlite3_vtab base;
 } LTab;
 typedef struct {
     sqlite3_vtab_cursor base;
-    void *h;
+    void *ptr;
     int nRow, iRow;
     int orderFlag;
     int limit;
     unsigned long mask;
 } LCsr;
 
-/* xConnect --------------------------------------------------------------*/
 static int lConnect(sqlite3 *db, void *aux, int argc, const char *const *argv,
                     sqlite3_vtab **pp, char **err) {
     const char *schema = "CREATE TABLE x("
-                         " timestamp REAL," /* 0 */
-                         " latitude  REAL," /* 1 */
-                         " longitude REAL," /* 2 */
-                         " hAccuracy REAL," /* 3 */
-                         " location  BLOB"  /* 4 – retained CLLocation* */
+                         " timestamp REAL,"
+                         " latitude  REAL,"
+                         " longitude REAL,"
+                         " hAccuracy REAL,"
+                         " location  BLOB" // CLLocation
                          ")";
     if (sqlite3_declare_vtab(db, schema) != SQLITE_OK)
         return SQLITE_ERROR;
@@ -71,35 +67,31 @@ static int lDisconnect(sqlite3_vtab *p) {
 static int lBest(sqlite3_vtab *p, sqlite3_index_info *pIdxInfo) {
     int argv = 1, limit = 0, orderFlag = 0;
 
-    /* recognise ORDER BY timestamp           */
     if (pIdxInfo->nOrderBy == 1 && pIdxInfo->aOrderBy[0].iColumn == 0) {
-        orderFlag = pIdxInfo->aOrderBy[0].desc ? -1 : 1; /* -1 DESC, +1 ASC */
+        orderFlag = pIdxInfo->aOrderBy[0].desc ? -1 : 1; // -1 DESC, +1 ASC
         pIdxInfo->orderByConsumed = 1;
     }
 
-    /* recognise LIMIT pseudo-constraint      */
     for (int i = 0; i < pIdxInfo->nConstraint; i++) {
         struct sqlite3_index_constraint *c = &pIdxInfo->aConstraint[i];
         if (!c->usable)
             continue;
         if (c->op == SQLITE_INDEX_CONSTRAINT_LIMIT) {
-            limit = -1; /* placeholder */
+            limit = -1;
             pIdxInfo->aConstraintUsage[i].argvIndex = argv++;
             pIdxInfo->aConstraintUsage[i].omit = 1;
             break;
         }
     }
 
-    /* idxStr encodes: "<mask>,<limit>,<orderFlag>" */
     unsigned long mask = (unsigned long)pIdxInfo->colUsed;
     pIdxInfo->idxStr = sqlite3_mprintf("%lx,%d,%d", mask, limit, orderFlag);
     pIdxInfo->needToFreeIdxStr = 1;
-    pIdxInfo->idxNum = 0; /* no other constraints */
+    pIdxInfo->idxNum = 0;
     pIdxInfo->estimatedCost = 5.0;
     return SQLITE_OK;
 }
 
-/* helpers ---------------------------------------------------------------*/
 static LCsr *csr(void) {
     LCsr *c = MALLOC(sizeof(*c));
     if (c)
@@ -112,13 +104,12 @@ static int openCur(sqlite3_vtab *pVtab, sqlite3_vtab_cursor **pp) {
 }
 static int closeCur(sqlite3_vtab_cursor *cur) {
     LCsr *c = (LCsr *)cur;
-    if (c->h)
-        location_vtab_release(c->h);
+    if (c->ptr)
+        location_vtab_release(c->ptr);
     FREE(c);
     return SQLITE_OK;
 }
 
-/* xFilter ---------------------------------------------------------------*/
 static int lFilter(sqlite3_vtab_cursor *cur, int idx, const char *idxStr,
                    int argc, sqlite3_value **argv) {
     LCsr *c = (LCsr *)cur;
@@ -133,7 +124,8 @@ static int lFilter(sqlite3_vtab_cursor *cur, int idx, const char *idxStr,
     if (c->limit == -1 && ai < argc)
         c->limit = sqlite3_value_int(argv[ai++]);
 
-    if (location_vtab_prepare(c->orderFlag, c->limit, c->mask, &c->h, &c->nRow))
+    if (location_vtab_prepare(c->orderFlag, c->limit, c->mask, &c->ptr,
+                              &c->nRow))
         return SQLITE_ERROR;
     return SQLITE_OK;
 }
@@ -147,12 +139,11 @@ static int eof(sqlite3_vtab_cursor *cur) {
     return c->iRow >= c->nRow;
 }
 
-/* xColumn ---------------------------------------------------------------*/
 static int column(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col) {
     LCsr *c = (LCsr *)cur;
     double ts = 0, lat = 0, lon = 0, acc = 0;
     const void *loc = NULL;
-    location_vtab_row(c->h, c->iRow, &ts, &lat, &lon, &acc, &loc);
+    location_vtab_row(c->ptr, c->iRow, &ts, &lat, &lon, &acc, &loc);
     switch (col) {
     case 0:
         sqlite3_result_double(ctx, ts);
@@ -177,7 +168,6 @@ static int rowid(sqlite3_vtab_cursor *cur, sqlite3_int64 *rid) {
     return SQLITE_OK;
 }
 
-/* module ----------------------------------------------------------------*/
 static const sqlite3_module mod = {
     0,        lConnect, lConnect, lBest, lDisconnect, lDestroy, openCur,
     closeCur, lFilter,  next,     eof,   column,      rowid,    0,
