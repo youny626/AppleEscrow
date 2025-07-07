@@ -38,12 +38,13 @@ struct EscrowApp: App {
             access:
                 //                    "SELECT identifier, collectionName, phasset FROM Photos"
                 //                    "SELECT identifier, collectionName, phasset FROM Photos LIMIT 1"
-                //                    "SELECT identifier, collectionName, phasset FROM Photos WHERE collectionName = 'escrowTest'"
+//                                    "SELECT identifier, collectionName, phasset FROM Photos WHERE collectionName = 'escrowTest'"
                 //                "SELECT * FROM Photos WHERE mediaType = 1"
                 //                    "SELECT * FROM Photos WHERE mediaType = 1 AND identifier = '6A8AD8A5-8356-4A7A-BD20-760490DCBEED/L0/001'"
                 //                    "SELECT * FROM Photos WHERE mediaType = 1 AND identifier = '6A8AD8A5-8356-4A7A-BD20-760490DCBEED/L0/001'"
                 //                    "SELECT * FROM Photos WHERE mediaType = 1 AND identifier = '6A8AD8A5-8356-4A7A-BD20-760490DCBEED/L0/001'"
-                "SELECT * FROM Photos WHERE mediaType = 1 ORDER BY creationDate DESC LIMIT 1"
+//                "SELECT * FROM Photos WHERE mediaType = 1 ORDER BY creationDate DESC LIMIT 1"
+            "SELECT * FROM Photos WHERE collectionName = 'doesNotExist'"
         ) { rows in
             rows.forEach { r in
                 let asset = r["phasset"] as! PHAsset

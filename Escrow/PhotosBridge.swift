@@ -62,6 +62,7 @@ func photos_vtab_prepare(
     let id = idEq.flatMap { String(cString: $0) }
     let collId = cidEq.flatMap { String(cString: $0) }
     let collName = cnameEq.flatMap { String(cString: $0) }
+    //    print(collName)
 
     let opts = PHFetchOptions()
     if mtEq >= 0 {
@@ -80,34 +81,37 @@ func photos_vtab_prepare(
         opts.fetchLimit = Int(limit)
     }
 
-    func firstAlbum(named n: String) -> PHAssetCollection? {
-        let fo = PHFetchOptions()
-        fo.predicate = NSPredicate(format: "localizedTitle == %@", n)
-        return
-            PHAssetCollection
-            .fetchAssetCollections(with: .album, subtype: .any, options: fo)
-            .firstObject
-    }
-
     let fetch: PHFetchResult<PHAsset>
     if let id = id {
         print("Fetching asset id = \(id) with options \(opts.debugDescription)")
         fetch = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: opts)
-    } else if let cid = collId,
-        let coll =
-            PHAssetCollection
-            .fetchAssetCollections(withLocalIdentifiers: [cid], options: nil)
-            .firstObject
-    {
+    } else if let cid = collId {
         print(
             "Fetching album id = \(cid) with options \(opts.debugDescription)"
         )
-        fetch = PHAsset.fetchAssets(in: coll, options: opts)
-    } else if let n = collName, let coll = firstAlbum(named: n) {
+        let coll = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [cid],
+            options: nil
+        ).firstObject
+        fetch = PHAsset.fetchAssets(
+            in: coll ?? PHAssetCollection(),
+            options: opts
+        )
+    } else if let n = collName {
         print(
             "Fetching album name = \(n) with options \(opts.debugDescription)"
         )
-        fetch = PHAsset.fetchAssets(in: coll, options: opts)
+        let fo = PHFetchOptions()
+        fo.predicate = NSPredicate(format: "localizedTitle == %@", n)
+        let coll = PHAssetCollection.fetchAssetCollections(
+            with: .album,
+            subtype: .any,
+            options: fo
+        ).firstObject
+        fetch = PHAsset.fetchAssets(
+            in: coll ?? PHAssetCollection(),
+            options: opts
+        )
     } else {
         print("Fetching assets with options \(opts.debugDescription)")
         fetch = PHAsset.fetchAssets(with: opts)
