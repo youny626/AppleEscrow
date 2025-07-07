@@ -40,15 +40,6 @@ func photos_vtab_prepare(
     _ outCnt: UnsafeMutablePointer<Int32>!
 ) -> Int32 {
 
-    func firstAlbum(named n: String) -> PHAssetCollection? {
-        let fo = PHFetchOptions()
-        fo.predicate = NSPredicate(format: "localizedTitle == %@", n)
-        return
-            PHAssetCollection
-            .fetchAssetCollections(with: .album, subtype: .any, options: fo)
-            .firstObject
-    }
-
     let opts = PHFetchOptions()
     let fetch: PHFetchResult<PHAsset> = PHAsset.fetchAssets(with: opts)
 
