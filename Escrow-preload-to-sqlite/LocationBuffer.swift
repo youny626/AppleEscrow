@@ -23,7 +23,7 @@ final class LocationBuffer: NSObject, CLLocationManagerDelegate {
         case .authorizedAlways, .authorizedWhenInUse:
             mgr.startUpdatingLocation()
             if let first = mgr.location {
-                _ = Escrow.shared.insertLocation(first)
+                Escrow.shared.insertLocation(first)
             }
         case .restricted:
             print("Location access restricted")
@@ -38,7 +38,9 @@ final class LocationBuffer: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
-        locations.forEach { Escrow.shared.insertLocation($0) }
+        locations.forEach {
+            Escrow.shared.insertLocation($0)
+        }
     }
 
     func locationManager(

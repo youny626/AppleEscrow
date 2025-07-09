@@ -84,15 +84,30 @@ public final class Escrow {
         }
 
         // Request permissions so the frameworks can be accessed
-        CNContactStore().requestAccess(for: .contacts) { _, _ in }
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in }
+        let contactStore = CNContactStore()
+        contactStore.requestAccess(for: .contacts) { granted, error in
+            if granted {
+                print("Contacts permission granted")
+            } else {
+                print("Contacts permission denied: \(error.debugDescription)")
+            }
+        }
+
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            if status == .authorized {
+                print("Photos permission granted")
+            } else {
+                print("Photos permission denied")
+            }
+        }
+        
         _ = LocationBuffer.shared  // ensure manager set-up
 
         createSchema()
         preloadContacts()
         preloadPhotos()
-        if let initial = CLLocationManager().location {
-            _ = insertLocation(initial)
+        if let firstLocation = CLLocationManager().location {
+            insertLocation(firstLocation)
         }
     }
 
@@ -250,9 +265,9 @@ public final class Escrow {
     }
 
     // Direct insert helper – called from LocationBuffer and at app start
-    @discardableResult
-    func insertLocation(_ loc: CLLocation) -> Bool {
-        guard let stmt = locInsertStmt else { return false }
+    func insertLocation(_ loc: CLLocation) {
+        guard let stmt = locInsertStmt else { return }
+        
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
         sqlite3_bind_double(stmt, 1, loc.timestamp.timeIntervalSince1970)
@@ -266,7 +281,9 @@ public final class Escrow {
             -1,
             SQLITE_TRANSIENT
         )
-        return sqlite3_step(stmt) == SQLITE_DONE
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            fatalError(String(cString: sqlite3_errmsg(db)))
+        }
     }
 
     public func run<T>(access sql: String, compute: ([Row]) -> T) -> T {
