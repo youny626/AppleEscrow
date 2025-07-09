@@ -35,6 +35,11 @@
 			path = "Escrow-vtab-no-pushdown";
 			sourceTree = "<group>";
 		};
+		430A3F3F2E1DE09300C0423B /* Escrow-preload-to-sqlite */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Escrow-preload-to-sqlite";
+			sourceTree = "<group>";
+		};
 		432CC6362DCC86430021B981 /* EscrowApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = EscrowApp;
@@ -85,6 +90,7 @@
 		432CC62B2DCC86430021B981 = {
 			isa = PBXGroup;
 			children = (
+				430A3F3F2E1DE09300C0423B /* Escrow-preload-to-sqlite */,
 				430A3E9E2E15DAD600C0423B /* Escrow-vtab-no-pushdown */,
 				432CC65F2DCC87410021B981 /* Escrow */,
 				432CC6362DCC86430021B981 /* EscrowApp */,
@@ -120,8 +126,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				430A3F3F2E1DE09300C0423B /* Escrow-preload-to-sqlite */,
 				432CC6362DCC86430021B981 /* EscrowApp */,
-				432CC65F2DCC87410021B981 /* Escrow */,
 			);
 			name = EscrowApp;
 			packageProductDependencies = (

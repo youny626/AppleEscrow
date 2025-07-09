@@ -43,8 +43,8 @@ struct EscrowApp: App {
                 //                    "SELECT * FROM Photos WHERE mediaType = 1 AND identifier = '6A8AD8A5-8356-4A7A-BD20-760490DCBEED/L0/001'"
                 //                    "SELECT * FROM Photos WHERE mediaType = 1 AND identifier = '6A8AD8A5-8356-4A7A-BD20-760490DCBEED/L0/001'"
                 //                    "SELECT * FROM Photos WHERE mediaType = 1 AND identifier = '6A8AD8A5-8356-4A7A-BD20-760490DCBEED/L0/001'"
-//                "SELECT * FROM Photos WHERE mediaType = 1 ORDER BY creationDate DESC LIMIT 1"
-            "SELECT * FROM Photos WHERE collectionName = 'doesNotExist'"
+                "SELECT * FROM Photos WHERE mediaType = 1 ORDER BY creationDate DESC LIMIT 1"
+//            "SELECT * FROM Photos WHERE collectionName = 'doesNotExist' OR collectionName = 'escrowTest' OR mediaType = 1"
         ) { rows in
             rows.forEach { r in
                 let asset = r["phasset"] as! PHAsset
