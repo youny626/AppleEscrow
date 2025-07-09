@@ -292,7 +292,6 @@ public final class Escrow {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             fatalError(String(cString: sqlite3_errmsg(db)))
         }
-        defer { sqlite3_finalize(stmt) }
 
         var rows: [Row] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -363,6 +362,11 @@ public final class Escrow {
 
             rows.append(Row(scratch.map { ($0.key, $0.value) }))
         }
+
+        guard sqlite3_finalize(stmt) == SQLITE_OK else {
+            fatalError(String(cString: sqlite3_errmsg(db)))
+        }
+        
         return compute(rows)
     }
 }
