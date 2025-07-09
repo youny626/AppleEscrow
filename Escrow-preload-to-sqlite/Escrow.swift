@@ -100,7 +100,7 @@ public final class Escrow {
                 print("Photos permission denied")
             }
         }
-        
+
         _ = LocationBuffer.shared  // ensure manager set-up
 
         createSchema()
@@ -135,7 +135,6 @@ public final class Escrow {
     }
 
     private func preloadContacts() {
-        guard let dbPtr = self.db else { return }
         let store = CNContactStore()
         let keys: [CNKeyDescriptor] = [
             CNContactIdentifierKey as CNKeyDescriptor,
@@ -147,9 +146,9 @@ public final class Escrow {
         let insertSQL =
             "INSERT OR IGNORE INTO Contacts (identifier, givenName, familyName, mainPhoneNumber) VALUES (?,?,?,?);"
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(dbPtr, insertSQL, -1, &stmt, nil) == SQLITE_OK
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK
         else {
-            fatalError(String(cString: sqlite3_errmsg(dbPtr)))
+            fatalError(String(cString: sqlite3_errmsg(db)))
         }
         defer { sqlite3_finalize(stmt) }
 
@@ -188,26 +187,27 @@ public final class Escrow {
                     -1,
                     SQLITE_TRANSIENT
                 )
-                if sqlite3_step(stmt) != SQLITE_DONE {
-                    print(
-                        "[Escrow preload] contact insert failed: \(String(cString: sqlite3_errmsg(dbPtr)))"
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    fatalError(
+                        "[Escrow preload] contact insert failed: \(String(cString: sqlite3_errmsg(db)))"
                     )
                 }
             }
-        } catch { print(error) }
+        } catch {
+            print(error)
+        }
     }
 
     private func preloadPhotos() {
-        guard let dbPtr = self.db else { return }
         let opts = PHFetchOptions()
         let fetch: PHFetchResult<PHAsset> = PHAsset.fetchAssets(with: opts)
 
         let insertSQL =
             "INSERT OR IGNORE INTO Photos (identifier, mediaType, creationDate, collectionIdentifier, collectionName, phasset) VALUES (?,?,?,?,?,?);"
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(dbPtr, insertSQL, -1, &stmt, nil) == SQLITE_OK
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK
         else {
-            fatalError(String(cString: sqlite3_errmsg(dbPtr)))
+            fatalError(String(cString: sqlite3_errmsg(db)))
         }
         defer { sqlite3_finalize(stmt) }
 
@@ -256,9 +256,9 @@ public final class Escrow {
                 -1,
                 SQLITE_TRANSIENT
             )  // store id again for phasset column
-            if sqlite3_step(stmt) != SQLITE_DONE {
-                print(
-                    "[Escrow preload] photo insert failed: \(String(cString: sqlite3_errmsg(dbPtr)))"
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                fatalError(
+                    "[Escrow preload] photo insert failed: \(String(cString: sqlite3_errmsg(self.db)))"
                 )
             }
         }
@@ -267,7 +267,7 @@ public final class Escrow {
     // Direct insert helper – called from LocationBuffer and at app start
     func insertLocation(_ loc: CLLocation) {
         guard let stmt = locInsertStmt else { return }
-        
+
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
         sqlite3_bind_double(stmt, 1, loc.timestamp.timeIntervalSince1970)
@@ -366,7 +366,7 @@ public final class Escrow {
         guard sqlite3_finalize(stmt) == SQLITE_OK else {
             fatalError(String(cString: sqlite3_errmsg(db)))
         }
-        
+
         return compute(rows)
     }
 }
