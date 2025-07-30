@@ -15,7 +15,7 @@ struct EscrowApp: App {
         let isBench = ProcessInfo.processInfo.environment["BENCH_EVAL"] == "1"
         if isBench {
             BenchRunner.kickOff()
-            return  // skip demo queries
+            return
         }
 
         let contactsCount = Escrow.shared.run(

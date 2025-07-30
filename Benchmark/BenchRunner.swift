@@ -1,12 +1,8 @@
-// BenchRunner.swift – run from inside the GUI app when BENCH_EVAL=1 is set
-// Stores results in ~/Documents/bench_results.csv so the user can pick it up easily.
-
 import Contacts
 import CoreLocation
 import Foundation
 import Photos
 
-// MARK: – Timer helper
 private struct NanoTimer {
     private var startNs: UInt64 = 0
     mutating func start() { startNs = DispatchTime.now().uptimeNanoseconds }
@@ -25,7 +21,6 @@ extension Array where Element == Double {
     }
 }
 
-// MARK: – Data seeding helpers
 private enum ContactSeeder {
     static let prefix = "EscrowBench_"
 
@@ -78,7 +73,6 @@ private enum ContactSeeder {
     }
 }
 
-// MARK: – Runner
 struct BenchRunner {
     private static let dataSize: Int =
         Int(ProcessInfo.processInfo.environment["SIZE"] ?? "100") ?? 100
@@ -93,7 +87,7 @@ struct BenchRunner {
         ).first!
         return docs.appendingPathComponent("bench_\(baseline)_\(dataSize).csv")
     }
-    
+
     private static let url = csvURL()
 
     private static var initialized = false
