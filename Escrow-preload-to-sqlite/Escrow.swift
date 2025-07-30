@@ -67,11 +67,23 @@ public struct Row: RandomAccessCollection, ExpressibleByDictionaryLiteral {
     init(_ pairs: [(String, CellValue)]) { self.pairs = pairs }
 }
 
+// Simple timer for ms precision
+private struct NanoTimer {
+    private var t0: UInt64 = 0
+    mutating func start() { t0 = DispatchTime.now().uptimeNanoseconds }
+    func stopMs() -> Double {
+        let diff = DispatchTime.now().uptimeNanoseconds - t0
+        return Double(diff) / 1_000_000.0
+    }
+}
+
 extension Row {
     func get<T>(_ key: String) -> T? { self[key] as? T }
 }
 
 public final class Escrow {
+    // Records milliseconds spent preloading each table
+    public static var preloadMetrics: [String: Double] = [:]
     public static let shared = Escrow()
     private var db: OpaquePointer?
 
@@ -104,11 +116,22 @@ public final class Escrow {
         _ = LocationBuffer.shared  // ensure manager set-up
 
         createSchema()
+
+        var timer = NanoTimer()
+
+        timer.start()
         preloadContacts()
+        Escrow.preloadMetrics["contacts_ms"] = timer.stopMs()
+
+        timer.start()
         preloadPhotos()
+        Escrow.preloadMetrics["photos_ms"] = timer.stopMs()
+
+        timer.start()
         if let firstLocation = CLLocationManager().location {
             insertLocation(firstLocation)
         }
+        Escrow.preloadMetrics["location_ms"] = timer.stopMs()
     }
 
     private func createSchema() {
