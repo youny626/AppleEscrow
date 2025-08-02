@@ -88,6 +88,8 @@ extension Row {
 }
 
 public final class Escrow {
+    // Records milliseconds spent preloading each table
+    public static var preloadMetrics: [String: Double] = [:]
     public static let shared = Escrow()
     private var db: OpaquePointer?
 

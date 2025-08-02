@@ -77,18 +77,16 @@ func photos_vtab_prepare(
         ]
     }
     if limit > 0 {
-        print("photos fetch limit = \(limit)")
+//        print("photos fetch limit = \(limit)")
         opts.fetchLimit = Int(limit)
     }
 
     let fetch: PHFetchResult<PHAsset>
     if let id = id {
-        print("Fetching asset id = \(id) with options \(opts.debugDescription)")
+//        print("Fetching asset id = \(id) with options \(opts.debugDescription)")
         fetch = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: opts)
     } else if let cid = collId {
-        print(
-            "Fetching album id = \(cid) with options \(opts.debugDescription)"
-        )
+//        print("Fetching album id = \(cid) with options \(opts.debugDescription)")
         let coll = PHAssetCollection.fetchAssetCollections(
             withLocalIdentifiers: [cid],
             options: nil
@@ -98,9 +96,7 @@ func photos_vtab_prepare(
             options: opts
         )
     } else if let n = collName {
-        print(
-            "Fetching album name = \(n) with options \(opts.debugDescription)"
-        )
+//        print("Fetching album name = \(n) with options \(opts.debugDescription)")
         let fo = PHFetchOptions()
         fo.predicate = NSPredicate(format: "localizedTitle == %@", n)
         let coll = PHAssetCollection.fetchAssetCollections(
@@ -113,7 +109,7 @@ func photos_vtab_prepare(
             options: opts
         )
     } else {
-        print("Fetching assets with options \(opts.debugDescription)")
+//        print("Fetching assets with options \(opts.debugDescription)")
         fetch = PHAsset.fetchAssets(with: opts)
     }
 

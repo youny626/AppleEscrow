@@ -58,12 +58,17 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "BASELINE"
-            value = "preload"
+            value = "vtab"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "SIZE"
-            value = "100"
+            value = "10000"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "OS_ACTIVITY_MODE"
+            value = "disable"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

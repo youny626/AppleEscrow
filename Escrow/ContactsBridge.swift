@@ -155,7 +155,7 @@ func contacts_vtab_prepare(
                 keysToFetch: keys
             )
             hits.forEach(append)
-            print("Predicate pushdown")
+//            print("Predicate pushdown")
         } else {
             let req = CNContactFetchRequest(keysToFetch: keys)
             try store.enumerateContacts(with: req) {

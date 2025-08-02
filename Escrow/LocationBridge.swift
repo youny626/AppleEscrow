@@ -57,7 +57,7 @@ func location_vtab_prepare(
     //        }
     //    }
     if orderFlag == -1 {
-        print("order by pushdown")
+//        print("order by pushdown")
         slice.reverse()
     }
 
