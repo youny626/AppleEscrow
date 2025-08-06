@@ -18,6 +18,13 @@ struct EscrowApp: App {
             return
         }
 
+        let isOverhead =
+            ProcessInfo.processInfo.environment["BENCH_OVERHEAD"] == "1"
+        if isOverhead {
+            OverheadBenchRunner.kickOff()
+            return
+        }
+
         let contactsCount = Escrow.shared.run(
             access:
                 //                                        "SELECT identifier, givenName, familyName, mainPhoneNumber FROM Contacts"
