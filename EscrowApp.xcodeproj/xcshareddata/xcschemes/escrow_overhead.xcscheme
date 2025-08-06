@@ -58,7 +58,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "OWM_API_KEY"
-            value = "472781eae143abe172f25962d4f66e5a&#10;"
+            value = "472781eae143abe172f25962d4f66e5a"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable

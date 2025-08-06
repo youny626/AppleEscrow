@@ -137,8 +137,25 @@ struct BenchRunner {
         preloadRecorded = true
     }
 
+    // Wait for LocationBuffer to have at least one location before running location benchmarks.
+    private static func waitForLocationReady(timeout: TimeInterval = 30) {
+        // Ensure Escrow (and LocationBuffer) initialised on main thread
+        DispatchQueue.main.sync {
+            _ = Escrow.shared
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !LocationBuffer.shared.snapshot().isEmpty { return }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        print(
+            "Warning: Location data not ready after \(timeout)s; proceeding anyway"
+        )
+    }
+
     private static func benchSize(_ size: Int) {
         print("\n=== Benchmark size = \(size) ===")
+        waitForLocationReady()
         ContactSeeder.reset(to: size)
 
         let contact = [

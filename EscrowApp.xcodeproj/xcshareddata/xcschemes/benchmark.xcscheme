@@ -58,7 +58,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "BASELINE"
-            value = "vtab"
+            value = "preload"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable

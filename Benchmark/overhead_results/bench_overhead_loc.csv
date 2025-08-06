@@ -1,0 +1,3 @@
+approach,query,size,mean_ms,std_ms
+escrow,location_weather,0,47.050316699999996,1.0357651428525712
+baseline,location_weather,0,48.747104000000014,1.2590242269222633

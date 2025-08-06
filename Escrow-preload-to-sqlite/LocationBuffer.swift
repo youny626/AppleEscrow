@@ -49,4 +49,12 @@ final class LocationBuffer: NSObject, CLLocationManagerDelegate {
     ) {
         print("Location manager failed: \(error.localizedDescription)")
     }
+
+    func snapshot() -> [CLLocation] {
+        var snap: [CLLocation] = []
+        if let loc = mgr.location {
+            snap.append(loc)
+        }
+        return snap
+    }
 }

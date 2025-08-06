@@ -72,20 +72,29 @@ private struct Utils {
             print("OpenWeatherMap API key missing (OWM_API_KEY)")
             return nil
         }
+        //        print(loc.debugDescription)
         let urlStr =
             "https://api.openweathermap.org/data/2.5/weather?lat=\(loc.coordinate.latitude)&lon=\(loc.coordinate.longitude)&appid=\(apiKey)&units=metric"
-        guard let url = URL(string: urlStr) else { return nil }
+        //        print(urlStr)
+        guard let url = URL(string: urlStr) else {
+            fatalError("\(urlStr) is not valid")
+        }
         let sem = DispatchSemaphore(value: 0)
         var temp: Double?
         URLSession.shared.dataTask(with: url) { data, _, _ in
             defer { sem.signal() }
-            guard let data = data else { return }
+            guard let data = data else {
+                fatalError("openweathermap did not return data")
+            }
             if let json = try? JSONSerialization.jsonObject(with: data)
-                as? [String: Any],
-                let main = json["main"] as? [String: Any],
-                let t = main["temp"] as? Double
+                as? [String: Any]
             {
-                temp = t
+                //                print(json)
+                if let main = json["main"] as? [String: Any],
+                    let t = main["temp"] as? Double
+                {
+                    temp = t
+                }
             }
         }.resume()
         sem.wait()
@@ -212,11 +221,23 @@ struct OverheadBenchRunner {
         return images.count
     }
 
+    private static let locMgr = CLLocationManager()
+
     private static func baselineLocation() -> Double? {
-        let mgr = CLLocationManager()
-        mgr.requestWhenInUseAuthorization()
-        guard let loc = mgr.location else { return nil }
-        return Utils.weatherForLocation(loc)
+        //        let mgr = CLLocationManager()
+        //        mgr.requestWhenInUseAuthorization()
+        let deadline = Date().addingTimeInterval(5)
+        var loc: CLLocation?
+        repeat {
+            loc = locMgr.location
+            if loc == nil {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+        } while loc == nil && Date() < deadline
+        guard let l = loc else {
+            fatalError("baseline did not return a location")
+        }
+        return Utils.weatherForLocation(l)
     }
 
     private static func escrowContact() -> Bool {
@@ -250,15 +271,27 @@ struct OverheadBenchRunner {
     }
 
     private static func escrowLocation() -> Double? {
-        return Escrow.shared.run(
-            access:
-                "SELECT location FROM Location ORDER BY timestamp DESC LIMIT 1"
-        ) { rows in
-            guard let loc = rows.first?["location"] as? CLLocation else {
-                return nil
+        let deadline = Date().addingTimeInterval(5)
+        var temp: Double?
+        repeat {
+            temp = Escrow.shared.run(
+                access:
+                    "SELECT location FROM Location ORDER BY timestamp DESC LIMIT 1"
+            ) { rows in
+                guard let loc = rows.first?["location"] as? CLLocation else {
+                    return nil
+                }
+                //                print(loc.debugDescription)
+                return Utils.weatherForLocation(loc)
             }
-            return Utils.weatherForLocation(loc)
+            if temp == nil {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+        } while temp == nil && Date() < deadline
+        guard temp != nil else {
+            fatalError("escrow return temp = nil")
         }
+        return temp
     }
 
     private static func time<T>(_ fn: () -> T) -> Double {
@@ -281,7 +314,13 @@ struct OverheadBenchRunner {
 
         // Escrow timings
         var eSamples: [Double] = []
-        for _ in 0..<10 { eSamples.append(time { _ = escrow() }) }
+        for _ in 0..<10 {
+            eSamples.append(
+                time {
+                    escrow()
+                }
+            )
+        }
         appendCSV("escrow,\(name),\(size),\(eSamples.mean),\(eSamples.std)")
         print(
             "Escrow \(name) size \(size): \(eSamples.mean) ms ± \(eSamples.std)"
@@ -289,7 +328,13 @@ struct OverheadBenchRunner {
 
         // Baseline timings
         var bSamples: [Double] = []
-        for _ in 0..<10 { bSamples.append(time { _ = baseline() }) }
+        for _ in 0..<10 {
+            bSamples.append(
+                time {
+                    baseline()
+                }
+            )
+        }
         appendCSV("baseline,\(name),\(size),\(bSamples.mean),\(bSamples.std)")
         print(
             "Baseline \(name) size \(size): \(bSamples.mean) ms ± \(bSamples.std)"
@@ -298,6 +343,11 @@ struct OverheadBenchRunner {
 
     private static func benchSize(_ size: Int) {
         print("\n=== Overhead Benchmark size = \(size) ===")
+        DispatchQueue.main.sync {
+            _ = Escrow.shared
+        }
+        locMgr.requestWhenInUseAuthorization()
+
         ContactSeeder.reset(to: size)
         benchQuery(
             name: "contact_valid",
