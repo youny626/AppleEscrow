@@ -143,7 +143,7 @@ private enum ContactSeeder {
             let c = CNMutableContact()
             c.givenName = i == count - 1 ? "uniqueName" : "\(prefix)GN\(i)"
             c.familyName = "\(prefix)FN\(i)"
-            let line = String(format: "%04d", i)
+            let line = String(format: "%04d", i % 10000)
             let phone = CNLabeledValue(
                 label: CNLabelPhoneNumberMobile,
                 value: CNPhoneNumber(stringValue: "650-555-\(line)")
@@ -152,6 +152,119 @@ private enum ContactSeeder {
             req.add(c, toContainerWithIdentifier: nil)
         }
         try? store.execute(req)
+    }
+}
+
+// MARK: - Seed Photos
+private enum PhotoSeeder {
+    static let albumName = "EscrowBench_Album"
+
+    private static func requestPhotosAuthIfNeeded() {
+        let sem = DispatchSemaphore(value: 0)
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in sem.signal() }
+        sem.wait()
+    }
+
+    private static func sourceURL() -> URL {
+        guard let p = ProcessInfo.processInfo.environment["PHOTO_SOURCE_PATH"], !p.isEmpty else {
+            fatalError("PHOTO_SOURCE_PATH not set")
+        }
+        var u = URL(fileURLWithPath: p)
+        if !FileManager.default.fileExists(atPath: u.path) {
+            if let pics = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first {
+                let candidate = pics.appendingPathComponent(p)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    u = candidate
+                }
+            }
+        }
+        guard FileManager.default.fileExists(atPath: u.path) else {
+            fatalError("PHOTO_SOURCE_PATH does not exist: \(u.path)")
+        }
+        return u
+    }
+
+    private static func ensureAlbum() -> PHAssetCollection? {
+        let existing = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+        var album: PHAssetCollection?
+        existing.enumerateObjects { c, _, stop in
+            if c.localizedTitle == albumName { album = c; stop.pointee = true }
+        }
+        if let album { return album }
+
+        var placeholder: PHObjectPlaceholder?
+        let sem = DispatchSemaphore(value: 0)
+        PHPhotoLibrary.shared().performChanges({
+            let r = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumName)
+            placeholder = r.placeholderForCreatedAssetCollection
+        }) { _, _ in sem.signal() }
+        sem.wait()
+        guard let ph = placeholder else { return nil }
+        let res = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [ph.localIdentifier], options: nil)
+        return res.firstObject
+    }
+
+    static func reset(to count: Int) {
+        requestPhotosAuthIfNeeded()
+        remove()
+        if count > 0 { add(count: count) }
+    }
+
+    static func remove() {
+        guard let album = ensureAlbum() else { return }
+        let assets = PHAsset.fetchAssets(in: album, options: nil)
+        guard assets.count > 0 else { return }
+        var list: [PHAsset] = []
+        assets.enumerateObjects { a, _, _ in list.append(a) }
+        let sem = DispatchSemaphore(value: 0)
+        let batch = 500
+        var i = 0
+        while i < list.count {
+            let end = min(i + batch, list.count)
+            let slice = list[i..<end]
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.deleteAssets(NSArray(array: Array(slice)))
+            }) { _, _ in sem.signal() }
+            sem.wait()
+            i = end
+        }
+    }
+
+    static func add(count: Int) {
+        guard count > 0 else { return }
+        let src = sourceURL()
+        guard let album = ensureAlbum() else { return }
+        let sem = DispatchSemaphore(value: 0)
+        let batch = 200
+        var created = 0
+        while created < count {
+            let n = min(batch, count - created)
+            var placeholders: [PHObjectPlaceholder] = []
+            PHPhotoLibrary.shared().performChanges({
+                let albumReq = PHAssetCollectionChangeRequest(for: album)
+                placeholders.removeAll(keepingCapacity: true)
+                placeholders.reserveCapacity(n)
+                let imgData = try? Data(contentsOf: src)
+                if imgData == nil { fatalError("Cannot read PHOTO_SOURCE_PATH: \(src.path)") }
+                for _ in 0..<n {
+                    let cr = PHAssetCreationRequest.forAsset()
+                    cr.addResource(with: .photo, data: imgData!, options: nil)
+                    if let ph = cr.placeholderForCreatedAsset { placeholders.append(ph) }
+                }
+                if placeholders.count != n {
+                    // Most likely file access problem or Photos refused; force fail
+                    fatalError("Failed to stage all photo creations: staged=\(placeholders.count) of n=\(n)")
+                }
+                albumReq?.addAssets(NSArray(array: placeholders))
+            }) { ok, err in
+                if !ok {
+                    fatalError("PHPhotoLibrary performChanges failed: \(err?.localizedDescription ?? "unknown error")")
+                }
+                sem.signal()
+            }
+            sem.wait()
+            created += n
+        }
     }
 }
 
@@ -349,6 +462,7 @@ struct OverheadBenchRunner {
         locMgr.requestWhenInUseAuthorization()
 
         ContactSeeder.reset(to: size)
+        PhotoSeeder.reset(to: size)
         benchQuery(
             name: "contact_valid",
             size: size,
@@ -368,6 +482,7 @@ struct OverheadBenchRunner {
             baseline: { baselineLocation() }
         )
         ContactSeeder.reset(to: 0)
+        PhotoSeeder.reset(to: 0)
     }
 
     static func kickOff() {

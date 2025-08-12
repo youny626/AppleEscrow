@@ -469,6 +469,7 @@
 				INFOPLIST_KEY_NSContactsUsageDescription = "Fetch contacts";
 				INFOPLIST_KEY_NSLocationUsageDescription = "Fetch location";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Fetch location";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "add photos";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Fetch photos";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -516,6 +517,7 @@
 				INFOPLIST_KEY_NSContactsUsageDescription = "Fetch contacts";
 				INFOPLIST_KEY_NSLocationUsageDescription = "Fetch location";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Fetch location";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "add photos";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Fetch photos";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
