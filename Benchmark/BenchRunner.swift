@@ -24,7 +24,10 @@ extension Array where Element == Double {
 private enum ContactSeeder {
     static let prefix = "EscrowBench_"
     private static var idsFileURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let docs = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first!
         return docs.appendingPathComponent("bench_contact_ids.txt")
     }
 
@@ -36,7 +39,9 @@ private enum ContactSeeder {
     private static func remove() {
         let store = CNContactStore()
         var ids: [String] = []
-        if let data = try? Data(contentsOf: idsFileURL), let text = String(data: data, encoding: .utf8) {
+        if let data = try? Data(contentsOf: idsFileURL),
+            let text = String(data: data, encoding: .utf8)
+        {
             ids = text.split(separator: "\n").map { String($0) }
         } else {
             let fetch = CNContactFetchRequest(keysToFetch: [
@@ -44,7 +49,8 @@ private enum ContactSeeder {
                 CNContactGivenNameKey as CNKeyDescriptor,
             ])
             try? store.enumerateContacts(with: fetch) { c, _ in
-                if c.givenName.hasPrefix(prefix) || c.givenName == "uniqueName" {
+                if c.givenName.hasPrefix(prefix) || c.givenName == "uniqueName"
+                {
                     ids.append(c.identifier)
                 }
             }
@@ -57,7 +63,10 @@ private enum ContactSeeder {
             let slice = ids[i..<end]
             let req = CNSaveRequest()
             slice.forEach { id in
-                if let c = try? store.unifiedContact(withIdentifier: id, keysToFetch: []) {
+                if let c = try? store.unifiedContact(
+                    withIdentifier: id,
+                    keysToFetch: []
+                ) {
                     let mut = c.mutableCopy() as! CNMutableContact
                     req.delete(mut)
                 }
@@ -77,7 +86,10 @@ private enum ContactSeeder {
             c.givenName = i == count - 1 ? "uniqueName" : "\(prefix)GN\(i)"
             c.familyName = "\(prefix)FN\(i)"
             let line = String(format: "%04d", i % 10000)
-            let phone = CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: "650-555-\(line)"))
+            let phone = CNLabeledValue(
+                label: CNLabelPhoneNumberMobile,
+                value: CNPhoneNumber(stringValue: "650-555-\(line)")
+            )
             c.phoneNumbers = [phone]
             req.add(c, toContainerWithIdentifier: nil)
             ids.append(c.identifier)
@@ -95,26 +107,40 @@ private enum PhotoSeeder {
 
     private static func requestPhotosAuthIfNeeded() {
         let sem = DispatchSemaphore(value: 0)
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in sem.signal() }
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in sem.signal()
+        }
         sem.wait()
     }
 
     private static func ensureAlbum() -> PHAssetCollection? {
-        let fetch = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+        let fetch = PHAssetCollection.fetchAssetCollections(
+            with: .album,
+            subtype: .any,
+            options: nil
+        )
         var album: PHAssetCollection?
         fetch.enumerateObjects { c, _, stop in
-            if c.localizedTitle == albumName { album = c; stop.pointee = true }
+            if c.localizedTitle == albumName {
+                album = c
+                stop.pointee = true
+            }
         }
         if album != nil { return album }
         var ph: PHObjectPlaceholder?
         let sem = DispatchSemaphore(value: 0)
         PHPhotoLibrary.shared().performChanges({
-            let r = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumName)
+            let r =
+                PHAssetCollectionChangeRequest.creationRequestForAssetCollection(
+                    withTitle: albumName
+                )
             ph = r.placeholderForCreatedAssetCollection
         }) { _, _ in sem.signal() }
         sem.wait()
         guard let ph else { return nil }
-        return PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [ph.localIdentifier], options: nil).firstObject
+        return PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [ph.localIdentifier],
+            options: nil
+        ).firstObject
     }
 
     static func reset(to count: Int) {
@@ -144,13 +170,20 @@ private enum PhotoSeeder {
 
     static func add(count: Int) {
         guard let album = ensureAlbum() else { return }
-        guard let srcPath = ProcessInfo.processInfo.environment["PHOTO_SOURCE_PATH"], !srcPath.isEmpty else {
+        guard
+            let srcPath = ProcessInfo.processInfo.environment[
+                "PHOTO_SOURCE_PATH"
+            ], !srcPath.isEmpty
+        else {
             fatalError("PHOTO_SOURCE_PATH not set")
         }
         var srcURL = URL(fileURLWithPath: srcPath)
         if !FileManager.default.fileExists(atPath: srcURL.path) {
             // Try resolving relative to Pictures directory if sandbox blocks absolute path
-            if let pics = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first {
+            if let pics = FileManager.default.urls(
+                for: .picturesDirectory,
+                in: .userDomainMask
+            ).first {
                 let candidate = pics.appendingPathComponent(srcPath)
                 if FileManager.default.fileExists(atPath: candidate.path) {
                     srcURL = candidate
@@ -171,19 +204,27 @@ private enum PhotoSeeder {
                 placeholders.removeAll(keepingCapacity: true)
                 placeholders.reserveCapacity(n)
                 let imgData = try? Data(contentsOf: srcURL)
-                if imgData == nil { fatalError("Cannot read PHOTO_SOURCE_PATH: \(srcURL.path)") }
+                if imgData == nil {
+                    fatalError("Cannot read PHOTO_SOURCE_PATH: \(srcURL.path)")
+                }
                 for _ in 0..<n {
                     let cr = PHAssetCreationRequest.forAsset()
                     cr.addResource(with: .photo, data: imgData!, options: nil)
-                    if let ph = cr.placeholderForCreatedAsset { placeholders.append(ph) }
+                    if let ph = cr.placeholderForCreatedAsset {
+                        placeholders.append(ph)
+                    }
                 }
                 if placeholders.count != n {
-                    fatalError("Failed to stage all photo creations: staged=\(placeholders.count) of n=\(n)")
+                    fatalError(
+                        "Failed to stage all photo creations: staged=\(placeholders.count) of n=\(n)"
+                    )
                 }
                 albumReq?.addAssets(NSArray(array: placeholders))
             }) { ok, err in
                 if !ok {
-                    fatalError("PHPhotoLibrary performChanges failed: \(err?.localizedDescription ?? "unknown error")")
+                    fatalError(
+                        "PHPhotoLibrary performChanges failed: \(err?.localizedDescription ?? "unknown error")"
+                    )
                 }
                 sem.signal()
             }

@@ -161,17 +161,23 @@ private enum PhotoSeeder {
 
     private static func requestPhotosAuthIfNeeded() {
         let sem = DispatchSemaphore(value: 0)
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in sem.signal() }
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in sem.signal()
+        }
         sem.wait()
     }
 
     private static func sourceURL() -> URL {
-        guard let p = ProcessInfo.processInfo.environment["PHOTO_SOURCE_PATH"], !p.isEmpty else {
+        guard let p = ProcessInfo.processInfo.environment["PHOTO_SOURCE_PATH"],
+            !p.isEmpty
+        else {
             fatalError("PHOTO_SOURCE_PATH not set")
         }
         var u = URL(fileURLWithPath: p)
         if !FileManager.default.fileExists(atPath: u.path) {
-            if let pics = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first {
+            if let pics = FileManager.default.urls(
+                for: .picturesDirectory,
+                in: .userDomainMask
+            ).first {
                 let candidate = pics.appendingPathComponent(p)
                 if FileManager.default.fileExists(atPath: candidate.path) {
                     u = candidate
@@ -185,22 +191,35 @@ private enum PhotoSeeder {
     }
 
     private static func ensureAlbum() -> PHAssetCollection? {
-        let existing = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+        let existing = PHAssetCollection.fetchAssetCollections(
+            with: .album,
+            subtype: .any,
+            options: nil
+        )
         var album: PHAssetCollection?
         existing.enumerateObjects { c, _, stop in
-            if c.localizedTitle == albumName { album = c; stop.pointee = true }
+            if c.localizedTitle == albumName {
+                album = c
+                stop.pointee = true
+            }
         }
         if let album { return album }
 
         var placeholder: PHObjectPlaceholder?
         let sem = DispatchSemaphore(value: 0)
         PHPhotoLibrary.shared().performChanges({
-            let r = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumName)
+            let r =
+                PHAssetCollectionChangeRequest.creationRequestForAssetCollection(
+                    withTitle: albumName
+                )
             placeholder = r.placeholderForCreatedAssetCollection
         }) { _, _ in sem.signal() }
         sem.wait()
         guard let ph = placeholder else { return nil }
-        let res = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [ph.localIdentifier], options: nil)
+        let res = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [ph.localIdentifier],
+            options: nil
+        )
         return res.firstObject
     }
 
@@ -245,20 +264,28 @@ private enum PhotoSeeder {
                 placeholders.removeAll(keepingCapacity: true)
                 placeholders.reserveCapacity(n)
                 let imgData = try? Data(contentsOf: src)
-                if imgData == nil { fatalError("Cannot read PHOTO_SOURCE_PATH: \(src.path)") }
+                if imgData == nil {
+                    fatalError("Cannot read PHOTO_SOURCE_PATH: \(src.path)")
+                }
                 for _ in 0..<n {
                     let cr = PHAssetCreationRequest.forAsset()
                     cr.addResource(with: .photo, data: imgData!, options: nil)
-                    if let ph = cr.placeholderForCreatedAsset { placeholders.append(ph) }
+                    if let ph = cr.placeholderForCreatedAsset {
+                        placeholders.append(ph)
+                    }
                 }
                 if placeholders.count != n {
                     // Most likely file access problem or Photos refused; force fail
-                    fatalError("Failed to stage all photo creations: staged=\(placeholders.count) of n=\(n)")
+                    fatalError(
+                        "Failed to stage all photo creations: staged=\(placeholders.count) of n=\(n)"
+                    )
                 }
                 albumReq?.addAssets(NSArray(array: placeholders))
             }) { ok, err in
                 if !ok {
-                    fatalError("PHPhotoLibrary performChanges failed: \(err?.localizedDescription ?? "unknown error")")
+                    fatalError(
+                        "PHPhotoLibrary performChanges failed: \(err?.localizedDescription ?? "unknown error")"
+                    )
                 }
                 sem.signal()
             }
