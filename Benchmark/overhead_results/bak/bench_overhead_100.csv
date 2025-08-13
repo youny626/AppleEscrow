@@ -1,0 +1,5 @@
+approach,query,size,mean_ms,std_ms
+escrow,contact_valid,100,7.446095799999999,1.9605262610553729
+baseline,contact_valid,100,6.902521,0.9282833397367422
+escrow,photo_transform,100,28.760341400000005,1.397085860350265
+baseline,photo_transform,100,30.2727626,1.953739893270504

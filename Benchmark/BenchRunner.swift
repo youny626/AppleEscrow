@@ -101,7 +101,6 @@ private enum ContactSeeder {
     }
 }
 
-// MARK: - Seed Photos
 private enum PhotoSeeder {
     static let albumName = "EscrowBench_Album"
 
@@ -321,30 +320,30 @@ struct BenchRunner {
         PhotoSeeder.reset(to: size)
 
         let contact = [
-            ("contactFull", "SELECT * FROM Contacts"),
-            ("contactProj", "SELECT familyName, givenName FROM Contacts"),
+            ("Contacts - Full", "SELECT * FROM Contacts"),
+            ("Contacts - Projection", "SELECT familyName, givenName FROM Contacts"),
             (
-                "contactPred",
+                "Contacts - Predicate",
                 "SELECT * FROM Contacts WHERE givenName = 'uniqueName'"
             ),
         ]
         let photos = [
-            ("photoFull", "SELECT * FROM Photos"),
-            ("photoProj", "SELECT phasset FROM Photos"),
+            ("Photos - Full", "SELECT * FROM Photos"),
+            ("Photos - Projection", "SELECT phasset FROM Photos"),
             (
-                "photoPred",
+                "Photos - Predicate",
                 "SELECT * FROM Photos WHERE collectionName = 'uniqueAlbum'"
             ),
             (
-                "photoOrder",
+                "Photos - Order By / Limit",
                 "SELECT * FROM Photos ORDER BY creationDate DESC LIMIT 1"
             ),
         ]
         let loc = [
-            ("locFull", "SELECT * FROM Location"),
-            ("locProj", "SELECT location FROM Location"),
+            // ("locFull", "SELECT * FROM Location"),
+            // ("locProj", "SELECT location FROM Location"),
             (
-                "locOrder",
+                "Location - Order By / Limit",
                 "SELECT * FROM Location ORDER BY timestamp DESC LIMIT 1"
             ),
         ]

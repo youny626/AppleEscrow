@@ -98,6 +98,9 @@ private struct Utils {
             }
         }.resume()
         sem.wait()
+        guard temp != nil else {
+            fatalError("temp is nil")
+        }
         return temp
     }
 }
@@ -155,7 +158,6 @@ private enum ContactSeeder {
     }
 }
 
-// MARK: - Seed Photos
 private enum PhotoSeeder {
     static let albumName = "EscrowBench_Album"
 
@@ -308,7 +310,7 @@ struct OverheadBenchRunner {
 
     private static var initialized = false
     private static func appendCSV(_ line: String) {
-        let header = "approach,query,size,mean_ms,std_ms\n"
+        let header = "approach,query,size,metric,mean_ms,std_ms\n"
         if !initialized {
             try? FileManager.default.removeItem(at: csvURL)
             try? header.data(using: .utf8)?.write(to: csvURL)
@@ -323,65 +325,82 @@ struct OverheadBenchRunner {
         }
     }
 
-    private static func baselineContact() -> Bool {
-        let store = CNContactStore()
-        let pred = CNContact.predicateForContacts(matchingName: "uniqueName")
-        let keys: [CNKeyDescriptor] = [
-            CNContactPhoneNumbersKey as CNKeyDescriptor
-        ]
-        guard
-            let contact = try? store.unifiedContacts(
-                matching: pred,
-                keysToFetch: keys
-            ).first,
-            let phone = contact.phoneNumbers.first?.value.stringValue
-        else { return false }
-        return Utils.isValidUSPhone(phone)
+    private static func baselineContactTimed() -> (Bool, Double, Double) {
+        var phone: String?
+        let accessMs = time {
+            let store = CNContactStore()
+            let pred = CNContact.predicateForContacts(
+                matchingName: "uniqueName"
+            )
+            let keys: [CNKeyDescriptor] = [
+                CNContactPhoneNumbersKey as CNKeyDescriptor
+            ]
+            phone =
+                (try? store.unifiedContacts(matching: pred, keysToFetch: keys)
+                .first)?.phoneNumbers.first?.value.stringValue
+        }
+        var result: Bool = false
+        guard phone != nil else { fatalError("No contact found!") }
+        let computeMs = time { result = Utils.isValidUSPhone(phone ?? "") }
+        return (result, accessMs, computeMs)
     }
 
-    private static func baselinePhotos() -> Int {
-        let opts = PHFetchOptions()
-        opts.predicate = NSPredicate(
-            format: "mediaType == %d",
-            PHAssetMediaType.image.rawValue
-        )
-        opts.sortDescriptors = [
-            NSSortDescriptor(key: "creationDate", ascending: false)
-        ]
-        opts.fetchLimit = 100
-        let fetch = PHAsset.fetchAssets(with: .image, options: opts)
-        var images: [Any] = []
-        fetch.enumerateObjects { asset, idx, stop in
-            #if canImport(AppKit)
-                if let img = Utils.image(from: asset) { images.append(img) }
-            #else
-                images.append(asset)
-            #endif
+    private static func baselinePhotosTimed() -> (Int, Double, Double) {
+        var assets: [PHAsset] = []
+        let accessMs = time {
+            let opts = PHFetchOptions()
+            opts.predicate = NSPredicate(
+                format: "mediaType == %d",
+                PHAssetMediaType.image.rawValue
+            )
+            opts.sortDescriptors = [
+                NSSortDescriptor(key: "creationDate", ascending: false)
+            ]
+            opts.fetchLimit = 100
+            let fetch = PHAsset.fetchAssets(with: .image, options: opts)
+            assets.removeAll(keepingCapacity: true)
+            fetch.enumerateObjects { a, _, _ in assets.append(a) }
         }
-        return images.count
+        var count = 0
+        let computeMs = time {
+            var images: [Any] = []
+            assets.forEach { asset in
+                #if canImport(AppKit)
+                    if let img = Utils.image(from: asset) { images.append(img) }
+                #else
+                    images.append(asset)
+                #endif
+            }
+            count = images.count
+        }
+        return (count, accessMs, computeMs)
     }
 
     private static let locMgr = CLLocationManager()
 
-    private static func baselineLocation() -> Double? {
-        //        let mgr = CLLocationManager()
-        //        mgr.requestWhenInUseAuthorization()
-        let deadline = Date().addingTimeInterval(5)
+    private static func baselineLocationTimed() -> (Double?, Double, Double) {
         var loc: CLLocation?
-        repeat {
-            loc = locMgr.location
-            if loc == nil {
-                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-            }
-        } while loc == nil && Date() < deadline
-        guard let l = loc else {
-            fatalError("baseline did not return a location")
+        let accessMs = time {
+            let deadline = Date().addingTimeInterval(5)
+            repeat {
+                loc = locMgr.location
+                if loc == nil {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+                }
+            } while loc == nil && Date() < deadline
         }
-        return Utils.weatherForLocation(l)
+        var temp: Double?
+        let computeMs = time {
+            guard let l = loc else {
+                fatalError("baseline did not return a location")
+            }
+            temp = Utils.weatherForLocation(l)
+        }
+        return (temp, accessMs, computeMs)
     }
 
-    private static func escrowContact() -> Bool {
-        return Escrow.shared.run(
+    private static func escrowContactTimed() -> (Bool, Double, Double) {
+        return Escrow.shared.runWithTiming(
             access:
                 "SELECT mainPhoneNumber FROM Contacts WHERE givenName = 'uniqueName'"
         ) { rows in
@@ -391,15 +410,16 @@ struct OverheadBenchRunner {
             return Utils.isValidUSPhone(phone)
         }
     }
-
-    private static func escrowPhotos() -> Int {
-        return Escrow.shared.run(
+    private static func escrowPhotosTimed() -> (Int, Double, Double) {
+        return Escrow.shared.runWithTiming(
             access:
                 "SELECT phasset FROM Photos WHERE mediaType = 1 ORDER BY creationDate DESC LIMIT 100"
         ) { rows in
             var imgs: [Any] = []
             rows.forEach { r in
-                guard let asset = r["phasset"] as? PHAsset else { return }
+                guard let asset = r["phasset"] as? PHAsset else {
+                    fatalError("escrow does not return PHAssets")
+                }
                 #if canImport(AppKit)
                     if let img = Utils.image(from: asset) { imgs.append(img) }
                 #else
@@ -409,29 +429,33 @@ struct OverheadBenchRunner {
             return imgs.count
         }
     }
-
-    private static func escrowLocation() -> Double? {
+    private static func escrowLocationTimed() -> (Double?, Double, Double) {
         let deadline = Date().addingTimeInterval(5)
-        var temp: Double?
+        var totalAccessMs: Double = 0
+        var foundLoc: CLLocation?
         repeat {
-            temp = Escrow.shared.run(
-                access:
-                    "SELECT location FROM Location ORDER BY timestamp DESC LIMIT 1"
-            ) { rows in
-                guard let loc = rows.first?["location"] as? CLLocation else {
-                    return nil
+            let (loc, aMs, _): (CLLocation?, Double, Double) = Escrow.shared
+                .runWithTiming(
+                    access:
+                        "SELECT location FROM Location ORDER BY timestamp DESC LIMIT 1"
+                ) { rows in
+                    rows.first?["location"] as? CLLocation
                 }
-                //                print(loc.debugDescription)
-                return Utils.weatherForLocation(loc)
-            }
-            if temp == nil {
+            totalAccessMs += aMs
+            if let l = loc {
+                foundLoc = l
+            } else {
                 Thread.sleep(forTimeInterval: 0.1)
             }
-        } while temp == nil && Date() < deadline
-        guard temp != nil else {
-            fatalError("escrow return temp = nil")
+        } while foundLoc == nil && Date() < deadline
+        var temp: Double?
+        let computeMs = time {
+            guard let loc = foundLoc else {
+                fatalError("escrow did not return a location")
+            }
+            temp = Utils.weatherForLocation(loc)
         }
-        return temp
+        return (temp, totalAccessMs, computeMs)
     }
 
     private static func time<T>(_ fn: () -> T) -> Double {
@@ -445,39 +469,43 @@ struct OverheadBenchRunner {
         name: String,
         size: Int,
         escrow: () -> T,
-        baseline: () -> T
+        baseline: () -> T,
+        escrowTimed: () -> (Double, Double),
+        baselineTimed: () -> (Double, Double)
     ) where T: Equatable {
-        // Ensure outputs match once before timing
+        // Sanity check (uses same result type as original structure)
         let outEscrow = escrow()
         let outBase = baseline()
         assert(outEscrow == outBase, "Outputs mismatch for \(name)")
 
-        // Escrow timings
-        var eSamples: [Double] = []
+        // Baseline split timings
+        var bAccess: [Double] = []
+        var bCompute: [Double] = []
         for _ in 0..<10 {
-            eSamples.append(
-                time {
-                    escrow()
-                }
-            )
+            let (a, c) = baselineTimed()
+            bAccess.append(a)
+            bCompute.append(c)
         }
-        appendCSV("escrow,\(name),\(size),\(eSamples.mean),\(eSamples.std)")
-        print(
-            "Escrow \(name) size \(size): \(eSamples.mean) ms ± \(eSamples.std)"
+        appendCSV(
+            "baseline,\(name),\(size),access,\(bAccess.mean),\(bAccess.std)"
+        )
+        appendCSV(
+            "baseline,\(name),\(size),compute,\(bCompute.mean),\(bCompute.std)"
         )
 
-        // Baseline timings
-        var bSamples: [Double] = []
+        // Escrow split timings
+        var eAccess: [Double] = []
+        var eCompute: [Double] = []
         for _ in 0..<10 {
-            bSamples.append(
-                time {
-                    baseline()
-                }
-            )
+            let (a, c) = escrowTimed()
+            eAccess.append(a)
+            eCompute.append(c)
         }
-        appendCSV("baseline,\(name),\(size),\(bSamples.mean),\(bSamples.std)")
-        print(
-            "Baseline \(name) size \(size): \(bSamples.mean) ms ± \(bSamples.std)"
+        appendCSV(
+            "escrow,\(name),\(size),access,\(eAccess.mean),\(eAccess.std)"
+        )
+        appendCSV(
+            "escrow,\(name),\(size),compute,\(eCompute.mean),\(eCompute.std)"
         )
     }
 
@@ -487,29 +515,73 @@ struct OverheadBenchRunner {
             _ = Escrow.shared
         }
         locMgr.requestWhenInUseAuthorization()
+        locMgr.startUpdatingLocation()
 
         ContactSeeder.reset(to: size)
         PhotoSeeder.reset(to: size)
         benchQuery(
             name: "contact_valid",
             size: size,
-            escrow: { escrowContact() },
-            baseline: { baselineContact() }
+            escrow: {
+                let (r, _, _) = escrowContactTimed()
+                return r
+            },
+            baseline: {
+                let (r, _, _) = baselineContactTimed()
+                return r
+            },
+            escrowTimed: {
+                let (_, a, c) = escrowContactTimed()
+                return (a, c)
+            },
+            baselineTimed: {
+                let (_, a, c) = baselineContactTimed()
+                return (a, c)
+            }
         )
         benchQuery(
             name: "photo_transform",
             size: size,
-            escrow: { escrowPhotos() },
-            baseline: { baselinePhotos() }
+            escrow: {
+                let (r, _, _) = escrowPhotosTimed()
+                return r
+            },
+            baseline: {
+                let (r, _, _) = baselinePhotosTimed()
+                return r
+            },
+            escrowTimed: {
+                let (_, a, c) = escrowPhotosTimed()
+                return (a, c)
+            },
+            baselineTimed: {
+                let (_, a, c) = baselinePhotosTimed()
+                return (a, c)
+            }
         )
         benchQuery(
             name: "location_weather",
             size: 0,
-            escrow: { escrowLocation() },
-            baseline: { baselineLocation() }
+            escrow: {
+                let (r, _, _) = escrowLocationTimed()
+                return r
+            },
+            baseline: {
+                let (r, _, _) = baselineLocationTimed()
+                return r
+            },
+            escrowTimed: {
+                let (_, a, c) = escrowLocationTimed()
+                return (a, c)
+            },
+            baselineTimed: {
+                let (_, a, c) = baselineLocationTimed()
+                return (a, c)
+            }
         )
         ContactSeeder.reset(to: 0)
         PhotoSeeder.reset(to: 0)
+        locMgr.stopUpdatingLocation()
     }
 
     static func kickOff() {

@@ -202,4 +202,78 @@ public final class Escrow {
         }
         return compute(rows)
     }
+
+    public func runWithTiming<T>(access sql: String, compute: ([Row]) -> T) -> (
+        T, Double, Double
+    ) {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            fatalError(String(cString: sqlite3_errmsg(db)))
+        }
+
+        let accessTimer = DispatchTime.now().uptimeNanoseconds
+        var rows: [Row] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            var row: [(String, CellValue)] = []
+            for i in 0..<sqlite3_column_count(stmt) {
+                let cname = String(cString: sqlite3_column_name(stmt, i))
+                let ctype = sqlite3_column_type(stmt, i)
+                let value: CellValue
+
+                switch ctype {
+                case SQLITE_INTEGER:
+                    value = .int(sqlite3_column_int64(stmt, i))
+                case SQLITE_FLOAT
+                where (cname == "creationDate" || cname == "timestamp"):
+                    value = .date(
+                        Date(
+                            timeIntervalSince1970: sqlite3_column_double(
+                                stmt,
+                                i
+                            )
+                        )
+                    )
+                case SQLITE_FLOAT:
+                    value = .float(sqlite3_column_double(stmt, i))
+                case SQLITE_TEXT:
+                    value = .text(String(cString: sqlite3_column_text(stmt, i)))
+                case SQLITE_BLOB where cname == "phasset":
+                    let raw = sqlite3_column_blob(stmt, i)
+                    let opaque = raw!.assumingMemoryBound(
+                        to: UnsafeRawPointer?.self
+                    ).pointee
+                    let asset = Unmanaged<PHAsset>.fromOpaque(opaque!)
+                        .takeRetainedValue()
+                    value = .phasset(asset)
+                case SQLITE_BLOB where cname == "location":
+                    let raw = sqlite3_column_blob(stmt, i)
+                    let opaque = raw!.assumingMemoryBound(
+                        to: UnsafeRawPointer?.self
+                    ).pointee
+                    let loc = Unmanaged<CLLocation>.fromOpaque(opaque!)
+                        .takeRetainedValue()
+                    value = .location(loc)
+                case SQLITE_BLOB:
+                    let bytes = sqlite3_column_blob(stmt, i)
+                    let len = sqlite3_column_bytes(stmt, i)
+                    value = .blob(Data(bytes: bytes!, count: Int(len)))
+                default: value = .null
+                }
+                row.append((cname, value))
+            }
+            rows.append(Row(row))
+        }
+        guard sqlite3_finalize(stmt) == SQLITE_OK else {
+            fatalError(String(cString: sqlite3_errmsg(db)))
+        }
+        let accessNs = DispatchTime.now().uptimeNanoseconds - accessTimer
+
+        let computeStart = DispatchTime.now().uptimeNanoseconds
+        let result = compute(rows)
+        let computeNs = DispatchTime.now().uptimeNanoseconds - computeStart
+
+        let accessMs = Double(accessNs) / 1_000_000.0
+        let computeMs = Double(computeNs) / 1_000_000.0
+        return (result, accessMs, computeMs)
+    }
 }
