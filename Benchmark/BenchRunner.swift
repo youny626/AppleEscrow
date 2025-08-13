@@ -193,6 +193,10 @@ private enum PhotoSeeder {
         guard FileManager.default.fileExists(atPath: srcURL.path) else {
             fatalError("PHOTO_SOURCE_PATH does not exist: \(srcURL.path)")
         }
+        // Read image bytes once per run
+        guard let imgData = try? Data(contentsOf: srcURL) else {
+            fatalError("Cannot read PHOTO_SOURCE_PATH: \(srcURL.path)")
+        }
         let sem = DispatchSemaphore(value: 0)
         let batch = 200
         var created = 0
@@ -203,13 +207,9 @@ private enum PhotoSeeder {
                 let albumReq = PHAssetCollectionChangeRequest(for: album)
                 placeholders.removeAll(keepingCapacity: true)
                 placeholders.reserveCapacity(n)
-                let imgData = try? Data(contentsOf: srcURL)
-                if imgData == nil {
-                    fatalError("Cannot read PHOTO_SOURCE_PATH: \(srcURL.path)")
-                }
                 for _ in 0..<n {
                     let cr = PHAssetCreationRequest.forAsset()
-                    cr.addResource(with: .photo, data: imgData!, options: nil)
+                    cr.addResource(with: .photo, data: imgData, options: nil)
                     if let ph = cr.placeholderForCreatedAsset {
                         placeholders.append(ph)
                     }
