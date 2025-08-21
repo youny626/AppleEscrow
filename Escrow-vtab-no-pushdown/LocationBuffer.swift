@@ -66,7 +66,8 @@ final class LocationBuffer: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didFailWithError error: any Error
     ) {
-        fatalError(error.localizedDescription)
+//        fatalError(error.localizedDescription)
+        print("Location manager failed: \(error.localizedDescription)")
     }
 
     func snapshot() -> [CLLocation] {

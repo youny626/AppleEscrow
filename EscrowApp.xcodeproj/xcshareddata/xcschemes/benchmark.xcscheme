@@ -62,11 +62,6 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
-            key = "SIZE"
-            value = "10"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
             key = "OS_ACTIVITY_MODE"
             value = "disable"
             isEnabled = "YES">
@@ -74,6 +69,11 @@
          <EnvironmentVariable
             key = "PHOTO_SOURCE_PATH"
             value = "/Users/zhiruzhu/Pictures/puppy000.jpeg"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "RUN_SIZE"
+            value = "100000"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

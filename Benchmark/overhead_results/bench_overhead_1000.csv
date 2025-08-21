@@ -1,0 +1,13 @@
+approach,query,size,metric,mean_ms,std_ms
+baseline,contact_valid,1000,access,26.6209876,28.386147903589016
+baseline,contact_valid,1000,compute,0.0046957,0.0012247994162310823
+escrow,contact_valid,1000,access,16.7945539,4.043550709088992
+escrow,contact_valid,1000,compute,0.0043459000000000015,0.0009106098451038184
+baseline,photo_transform,1000,access,5.777200000000001,0.179398183798499
+baseline,photo_transform,1000,compute,22.9423,0.8066448446274231
+escrow,photo_transform,1000,access,5.8118001,0.19143285585627653
+escrow,photo_transform,1000,compute,22.1768001,0.4188358414351501
+baseline,location_weather,0,access,0.0049792000000000005,0.0019219115380266596
+baseline,location_weather,0,compute,44.5975041,1.4596372558756816
+escrow,location_weather,0,access,0.013120799999999998,0.0015738789534141438
+escrow,location_weather,0,compute,44.33018750000001,0.6940785080440481

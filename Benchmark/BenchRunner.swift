@@ -78,25 +78,113 @@ private enum ContactSeeder {
     }
 
     private static func add(count: Int) {
+        guard count > 0 else { return }
         let store = CNContactStore()
-        let req = CNSaveRequest()
-        var ids: [String] = []
-        for i in 0..<count {
-            let c = CNMutableContact()
-            c.givenName = i == count - 1 ? "uniqueName" : "\(prefix)GN\(i)"
-            c.familyName = "\(prefix)FN\(i)"
-            let line = String(format: "%04d", i % 10000)
-            let phone = CNLabeledValue(
-                label: CNLabelPhoneNumberMobile,
-                value: CNPhoneNumber(stringValue: "650-555-\(line)")
-            )
-            c.phoneNumbers = [phone]
-            req.add(c, toContainerWithIdentifier: nil)
-            ids.append(c.identifier)
+        // Use smaller batches to avoid AddressBook XPC overload at very large sizes
+        let batch = 1000
+        var i = 0
+        while i < count {
+            autoreleasepool {
+                let end = min(i + batch, count)
+                let req = CNSaveRequest()
+                var idx = i
+                while idx < end {
+                    let c = CNMutableContact()
+                    c.givenName =
+                        idx == count - 1 ? "uniqueName" : "\(prefix)GN\(idx)"
+                    c.familyName = "\(prefix)FN\(idx)"
+                    let line = String(format: "%04d", idx % 10000)
+                    let phone = CNLabeledValue(
+                        label: CNLabelPhoneNumberMobile,
+                        value: CNPhoneNumber(stringValue: "650-555-\(line)")
+                    )
+                    c.phoneNumbers = [phone]
+                    req.add(c, toContainerWithIdentifier: nil)
+                    idx += 1
+                }
+                _ = try? store.execute(req)
+            }
+            // brief yield to allow addressbookd to process
+            Thread.sleep(forTimeInterval: 0.01)
+            i += batch
         }
-        if (try? store.execute(req)) != nil {
-            let text = ids.filter { !$0.isEmpty }.joined(separator: "\n")
+        // Enumerate to persist identifiers for faster subsequent removals
+        let fetch = CNContactFetchRequest(keysToFetch: [
+            CNContactIdentifierKey as CNKeyDescriptor,
+            CNContactGivenNameKey as CNKeyDescriptor,
+        ])
+        var ids: [String] = []
+        try? store.enumerateContacts(with: fetch) { c, _ in
+            if c.givenName.hasPrefix(prefix) || c.givenName == "uniqueName" {
+                ids.append(c.identifier)
+            }
+        }
+        if !ids.isEmpty {
+            let text = ids.joined(separator: "\n")
             try? text.data(using: .utf8)?.write(to: idsFileURL)
+        }
+    }
+
+    // Ensure exact benchmark contact count equals `target` by trimming only,
+    // and guarantee a single 'uniqueName' contact exists.
+    static func ensureExact(to target: Int) {
+        let store = CNContactStore()
+        let fetch = CNContactFetchRequest(keysToFetch: [
+            CNContactIdentifierKey as CNKeyDescriptor,
+            CNContactGivenNameKey as CNKeyDescriptor,
+        ])
+        var escrowIds: [String] = []
+        var uniqueIds: [String] = []
+        try? store.enumerateContacts(with: fetch) { c, _ in
+            if c.givenName == "uniqueName" {
+                uniqueIds.append(c.identifier)
+            } else if c.givenName.hasPrefix(prefix) {
+                escrowIds.append(c.identifier)
+            }
+        }
+
+        // Keep at most one uniqueName
+        if uniqueIds.count > 1 {
+            let extras = uniqueIds.dropFirst()
+            let req = CNSaveRequest()
+            extras.forEach { id in
+                if let c = try? store.unifiedContact(withIdentifier: id, keysToFetch: []) {
+                    let mut = c.mutableCopy() as! CNMutableContact
+                    req.delete(mut)
+                }
+            }
+            _ = try? store.execute(req)
+            uniqueIds = Array(uniqueIds.prefix(1))
+        }
+
+        let desiredEscrow = max(target - 1, 0) // reserve one for uniqueName
+        if escrowIds.count > desiredEscrow {
+            let toRemove = escrowIds.count - desiredEscrow
+            var i = 0
+            let batch = 2000
+            while i < toRemove {
+                let end = min(i + batch, toRemove)
+                let slice = escrowIds[i..<end]
+                let req = CNSaveRequest()
+                slice.forEach { id in
+                    if let c = try? store.unifiedContact(withIdentifier: id, keysToFetch: []) {
+                        let mut = c.mutableCopy() as! CNMutableContact
+                        req.delete(mut)
+                    }
+                }
+                _ = try? store.execute(req)
+                i = end
+            }
+        }
+
+        // Ensure uniqueName exists
+        if uniqueIds.isEmpty {
+            let c = CNMutableContact()
+            c.givenName = "uniqueName"
+            c.familyName = prefix + "FN_unique"
+            let req = CNSaveRequest()
+            req.add(c, toContainerWithIdentifier: nil)
+            _ = try? store.execute(req)
         }
     }
 }
@@ -148,23 +236,28 @@ private enum PhotoSeeder {
         if count > 0 { add(count: count) }
     }
 
+    static func currentCount() -> Int {
+        guard let album = ensureAlbum() else { return 0 }
+        return PHAsset.fetchAssets(in: album, options: nil).count
+    }
+
+    static func ensureCount(to count: Int) {
+        requestPhotosAuthIfNeeded()
+        let cur = currentCount()
+        if cur < count { add(count: count - cur) }
+        // assuming sizes increase; if cur > count, skip to avoid unintended deletes
+    }
+
     static func remove() {
         guard let album = ensureAlbum() else { return }
-        let assets = PHAsset.fetchAssets(in: album, options: nil)
-        var list: [PHAsset] = []
-        assets.enumerateObjects { a, _, _ in list.append(a) }
+        let fetch = PHAsset.fetchAssets(in: album, options: nil)
+        guard fetch.count > 0 else { return }
+        // One performChanges call → one confirmation prompt regardless of count
         let sem = DispatchSemaphore(value: 0)
-        let batch = 500
-        var i = 0
-        while i < list.count {
-            let end = min(i + batch, list.count)
-            let slice = list[i..<end]
-            PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.deleteAssets(NSArray(array: Array(slice)))
-            }) { _, _ in sem.signal() }
-            sem.wait()
-            i = end
-        }
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.deleteAssets(fetch)
+        }) { _, _ in sem.signal() }
+        sem.wait()
     }
 
     static func add(count: Int) {
@@ -192,12 +285,8 @@ private enum PhotoSeeder {
         guard FileManager.default.fileExists(atPath: srcURL.path) else {
             fatalError("PHOTO_SOURCE_PATH does not exist: \(srcURL.path)")
         }
-        // Read image bytes once per run
-        guard let imgData = try? Data(contentsOf: srcURL) else {
-            fatalError("Cannot read PHOTO_SOURCE_PATH: \(srcURL.path)")
-        }
         let sem = DispatchSemaphore(value: 0)
-        let batch = 200
+        let batch = 5000
         var created = 0
         while created < count {
             let n = min(batch, count - created)
@@ -208,7 +297,7 @@ private enum PhotoSeeder {
                 placeholders.reserveCapacity(n)
                 for _ in 0..<n {
                     let cr = PHAssetCreationRequest.forAsset()
-                    cr.addResource(with: .photo, data: imgData, options: nil)
+                    cr.addResource(with: .photo, fileURL: srcURL, options: nil)
                     if let ph = cr.placeholderForCreatedAsset {
                         placeholders.append(ph)
                     }
@@ -231,33 +320,60 @@ private enum PhotoSeeder {
             created += n
         }
     }
+
+    // Delete extras so album contains at most `target` assets (one prompt per run).
+    static func ensureAtMost(to target: Int) {
+        requestPhotosAuthIfNeeded()
+        guard let album = ensureAlbum() else { return }
+        let fetch = PHAsset.fetchAssets(in: album, options: nil)
+        let count = fetch.count
+        guard count > target else { return }
+        let toDelete = count - target
+        var assetsToDelete: [PHAsset] = []
+        assetsToDelete.reserveCapacity(toDelete)
+        fetch.enumerateObjects { a, _, stop in
+            if assetsToDelete.count < toDelete {
+                assetsToDelete.append(a)
+            } else {
+                stop.pointee = true
+            }
+        }
+        let sem = DispatchSemaphore(value: 0)
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)
+        }) { _, _ in sem.signal() }
+        sem.wait()
+    }
 }
 
 struct BenchRunner {
-    private static let dataSize: Int =
-        Int(ProcessInfo.processInfo.environment["SIZE"] ?? "100") ?? 100
     private static let baseline: String = {
         ProcessInfo.processInfo.environment["BASELINE"] ?? "unknown"
     }()
+    // Run a single size per execution by default (100k). You can override with RUN_SIZE env var.
+    private static let sizes: [Int] = {
+        if let s = ProcessInfo.processInfo.environment["RUN_SIZE"],
+            let n = Int(s)
+        { return [n] }
+        return [100_000]
+    }()
 
-    private static func csvURL() -> URL {
+    private static func csvURL(for size: Int) -> URL {
         let docs = FileManager.default.urls(
             for: .documentDirectory,
             in: .userDomainMask
         ).first!
-        return docs.appendingPathComponent("bench_\(baseline)_\(dataSize).csv")
+        return docs.appendingPathComponent("bench_\(baseline)_\(size).csv")
     }
 
-    private static let url = csvURL()
-
-    private static var initialized = false
+    // Current CSV target for the running size
+    private static var currentCsvURL: URL?
     private static func appendCSV(_ line: String) {
+        guard let url = currentCsvURL else { return }
         let header = "baseline,query,size,mean_ms,std_ms\n"
-        if !initialized {
-            // overwrite existing file
-            try? FileManager.default.removeItem(at: url)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            // write header for a fresh file
             try? header.data(using: .utf8)?.write(to: url)
-            initialized = true
         }
         if let data = (line + "\n").data(using: .utf8) {
             if let fh = try? FileHandle(forWritingTo: url) {
@@ -282,7 +398,7 @@ struct BenchRunner {
             samples.append(timeQuery(sql))
         }
         appendCSV(
-            "\(baseline),\(name),\(dataSize),\(samples.mean),\(samples.std)"
+            "\(baseline),\(name),\(size),\(samples.mean),\(samples.std)"
         )
         print("→ \(name) size \(size) : \(samples.mean) ms ± \(samples.std)")
     }
@@ -315,13 +431,21 @@ struct BenchRunner {
 
     private static func benchSize(_ size: Int) {
         print("\n=== Benchmark size = \(size) ===")
+        // Prepare CSV output for this size
+        let out = csvURL(for: size)
+        try? FileManager.default.removeItem(at: out)
+        currentCsvURL = out
         waitForLocationReady()
-        ContactSeeder.reset(to: size)
-        PhotoSeeder.reset(to: size)
+        // Trim contacts/photos down to target without re-adding large amounts.
+        ContactSeeder.ensureExact(to: size)
+        PhotoSeeder.ensureAtMost(to: size)
 
         let contact = [
             ("Contacts - Full", "SELECT * FROM Contacts"),
-            ("Contacts - Projection", "SELECT familyName, givenName FROM Contacts"),
+            (
+                "Contacts - Projection",
+                "SELECT familyName, givenName FROM Contacts"
+            ),
             (
                 "Contacts - Predicate",
                 "SELECT * FROM Contacts WHERE givenName = 'uniqueName'"
@@ -345,23 +469,25 @@ struct BenchRunner {
             (
                 "Location - Order By / Limit",
                 "SELECT * FROM Location ORDER BY timestamp DESC LIMIT 1"
-            ),
+            )
         ]
 
         contact.forEach { benchQuery(name: $0.0, sql: $0.1, size: size) }
         photos.forEach { benchQuery(name: $0.0, sql: $0.1, size: size) }
         loc.forEach { benchQuery(name: $0.0, sql: $0.1, size: size) }
         recordPreloadIfNeeded()
-
-        ContactSeeder.reset(to: 0)  // clean
-        PhotoSeeder.reset(to: 0)
     }
 
     static func kickOff() {
         // run asynchronously so UI can finish launching
         DispatchQueue.global(qos: .userInitiated).async {
-            benchSize(dataSize)
-            print("Bench finished – see CSV file in \(url.path())")
+            for s in sizes {
+                benchSize(s)
+                if let out = currentCsvURL {
+                    print("Bench finished – see CSV file in \(out.path())")
+                }
+            }
+            // Preserve seeded data for subsequent runs
         }
     }
 }

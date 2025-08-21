@@ -67,8 +67,9 @@ private struct Utils {
     #endif
 
     static func weatherForLocation(_ loc: CLLocation) -> Double? {
-        guard let apiKey = ProcessInfo.processInfo.environment["OWM_API_KEY"]
-        else {
+        let apiKeyTrimmed = ProcessInfo.processInfo.environment["OWM_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let apiKey = apiKeyTrimmed, !apiKey.isEmpty else {
             print("OpenWeatherMap API key missing (OWM_API_KEY)")
             return nil
         }
@@ -107,6 +108,13 @@ private struct Utils {
 
 private enum ContactSeeder {
     static let prefix = "EscrowBench_"
+    private static var idsFileURL: URL {
+        let docs = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first!
+        return docs.appendingPathComponent("bench_contact_ids.txt")
+    }
 
     static func reset(to count: Int) {
         remove()
@@ -115,6 +123,77 @@ private enum ContactSeeder {
 
     private static func remove() {
         let store = CNContactStore()
+        var ids: [String] = []
+        if let data = try? Data(contentsOf: idsFileURL),
+            let text = String(data: data, encoding: .utf8)
+        {
+            ids = text.split(separator: "\n").map { String($0) }
+        } else {
+            let fetch = CNContactFetchRequest(keysToFetch: [
+                CNContactIdentifierKey as CNKeyDescriptor,
+                CNContactGivenNameKey as CNKeyDescriptor,
+            ])
+            try? store.enumerateContacts(with: fetch) { c, _ in
+                if c.givenName.hasPrefix(prefix) || c.givenName == "uniqueName"
+                {
+                    ids.append(c.identifier)
+                }
+            }
+        }
+        guard !ids.isEmpty else { return }
+        let batch = 10000
+        var i = 0
+        while i < ids.count {
+            let end = min(i + batch, ids.count)
+            let slice = ids[i..<end]
+            let req = CNSaveRequest()
+            slice.forEach { id in
+                if let c = try? store.unifiedContact(
+                    withIdentifier: id,
+                    keysToFetch: []
+                ) {
+                    let mut = c.mutableCopy() as! CNMutableContact
+                    req.delete(mut)
+                }
+            }
+            _ = try? store.execute(req)
+            i = end
+        }
+        try? FileManager.default.removeItem(at: idsFileURL)
+    }
+
+    private static func add(count: Int) {
+        guard count > 0 else { return }
+        let store = CNContactStore()
+        // Use smaller batches to avoid overloading AddressBook XPC service at very large sizes
+        let batch = 10000
+        var i = 0
+        while i < count {
+            autoreleasepool {
+                let end = min(i + batch, count)
+                let req = CNSaveRequest()
+                var idx = i
+                while idx < end {
+                    let c = CNMutableContact()
+                    c.givenName =
+                        idx == count - 1 ? "uniqueName" : "\(prefix)GN\(idx)"
+                    c.familyName = "\(prefix)FN\(idx)"
+                    let line = String(format: "%04d", idx % 10000)
+                    let phone = CNLabeledValue(
+                        label: CNLabelPhoneNumberMobile,
+                        value: CNPhoneNumber(stringValue: "650-555-\(line)")
+                    )
+                    c.phoneNumbers = [phone]
+                    req.add(c, toContainerWithIdentifier: nil)
+                    idx += 1
+                }
+                _ = try? store.execute(req)
+            }
+            // brief yield to let addressbookd catch up
+            Thread.sleep(forTimeInterval: 0.01)
+            i += batch
+        }
+        // Enumerate to persist identifiers for fast removal later
         let fetch = CNContactFetchRequest(keysToFetch: [
             CNContactIdentifierKey as CNKeyDescriptor,
             CNContactGivenNameKey as CNKeyDescriptor,
@@ -125,36 +204,10 @@ private enum ContactSeeder {
                 ids.append(c.identifier)
             }
         }
-        guard !ids.isEmpty else { return }
-        let req = CNSaveRequest()
-        ids.forEach { id in
-            if let c = try? store.unifiedContact(
-                withIdentifier: id,
-                keysToFetch: []
-            ) {
-                let mut = c.mutableCopy() as! CNMutableContact
-                req.delete(mut)
-            }
+        if !ids.isEmpty {
+            let text = ids.joined(separator: "\n")
+            try? text.data(using: .utf8)?.write(to: idsFileURL)
         }
-        try? store.execute(req)
-    }
-
-    private static func add(count: Int) {
-        let store = CNContactStore()
-        let req = CNSaveRequest()
-        for i in 0..<count {
-            let c = CNMutableContact()
-            c.givenName = i == count - 1 ? "uniqueName" : "\(prefix)GN\(i)"
-            c.familyName = "\(prefix)FN\(i)"
-            let line = String(format: "%04d", i % 10000)
-            let phone = CNLabeledValue(
-                label: CNLabelPhoneNumberMobile,
-                value: CNPhoneNumber(stringValue: "650-555-\(line)")
-            )
-            c.phoneNumbers = [phone]
-            req.add(c, toContainerWithIdentifier: nil)
-        }
-        try? store.execute(req)
     }
 }
 
@@ -231,36 +284,36 @@ private enum PhotoSeeder {
         if count > 0 { add(count: count) }
     }
 
+    static func currentCount() -> Int {
+        guard let album = ensureAlbum() else { return 0 }
+        return PHAsset.fetchAssets(in: album, options: nil).count
+    }
+
+    static func ensureCount(to count: Int) {
+        requestPhotosAuthIfNeeded()
+        let cur = currentCount()
+        if cur < count { add(count: count - cur) }
+        // assuming sizes increase; if cur > count, skip here to avoid accidental deletion
+    }
+
     static func remove() {
         guard let album = ensureAlbum() else { return }
         let assets = PHAsset.fetchAssets(in: album, options: nil)
         guard assets.count > 0 else { return }
-        var list: [PHAsset] = []
-        assets.enumerateObjects { a, _, _ in list.append(a) }
+        // Single performChanges for all assets → one confirmation prompt
         let sem = DispatchSemaphore(value: 0)
-        let batch = 500
-        var i = 0
-        while i < list.count {
-            let end = min(i + batch, list.count)
-            let slice = list[i..<end]
-            PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.deleteAssets(NSArray(array: Array(slice)))
-            }) { _, _ in sem.signal() }
-            sem.wait()
-            i = end
-        }
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.deleteAssets(assets)
+        }) { _, _ in sem.signal() }
+        sem.wait()
     }
 
     static func add(count: Int) {
         guard count > 0 else { return }
         let src = sourceURL()
         guard let album = ensureAlbum() else { return }
-        // Read source bytes once
-        guard let imgData = try? Data(contentsOf: src) else {
-            fatalError("Cannot read PHOTO_SOURCE_PATH: \(src.path)")
-        }
         let sem = DispatchSemaphore(value: 0)
-        let batch = 200
+        let batch = 10000
         var created = 0
         while created < count {
             let n = min(batch, count - created)
@@ -271,7 +324,7 @@ private enum PhotoSeeder {
                 placeholders.reserveCapacity(n)
                 for _ in 0..<n {
                     let cr = PHAssetCreationRequest.forAsset()
-                    cr.addResource(with: .photo, data: imgData, options: nil)
+                    cr.addResource(with: .photo, fileURL: src, options: nil)
                     if let ph = cr.placeholderForCreatedAsset {
                         placeholders.append(ph)
                     }
@@ -298,26 +351,24 @@ private enum PhotoSeeder {
 }
 
 struct OverheadBenchRunner {
-    private static let dataSize: Int =
-        Int(ProcessInfo.processInfo.environment["SIZE"] ?? "100") ?? 100
-    private static let csvURL: URL = {
+    private static let sizes: [Int] = [1_000_000]
+    private static func csvURL(for size: Int) -> URL {
         let docs = FileManager.default.urls(
             for: .documentDirectory,
             in: .userDomainMask
         ).first!
-        return docs.appendingPathComponent("bench_overhead_\(dataSize).csv")
-    }()
+        return docs.appendingPathComponent("bench_overhead_\(size).csv")
+    }
 
-    private static var initialized = false
+    private static var currentCsvURL: URL?
     private static func appendCSV(_ line: String) {
+        guard let url = currentCsvURL else { return }
         let header = "approach,query,size,metric,mean_ms,std_ms\n"
-        if !initialized {
-            try? FileManager.default.removeItem(at: csvURL)
-            try? header.data(using: .utf8)?.write(to: csvURL)
-            initialized = true
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? header.data(using: .utf8)?.write(to: url)
         }
         if let d = (line + "\n").data(using: .utf8) {
-            if let fh = try? FileHandle(forWritingTo: csvURL) {
+            if let fh = try? FileHandle(forWritingTo: url) {
                 _ = try? fh.seekToEnd()
                 fh.write(d)
                 try? fh.close()
@@ -511,6 +562,10 @@ struct OverheadBenchRunner {
 
     private static func benchSize(_ size: Int) {
         print("\n=== Overhead Benchmark size = \(size) ===")
+        // Prepare CSV for this size
+        let out = csvURL(for: size)
+        try? FileManager.default.removeItem(at: out)
+        currentCsvURL = out
         DispatchQueue.main.sync {
             _ = Escrow.shared
         }
@@ -518,7 +573,7 @@ struct OverheadBenchRunner {
         locMgr.startUpdatingLocation()
 
         ContactSeeder.reset(to: size)
-        PhotoSeeder.reset(to: size)
+        PhotoSeeder.ensureCount(to: size)
         benchQuery(
             name: "contact_valid",
             size: size,
@@ -579,15 +634,22 @@ struct OverheadBenchRunner {
                 return (a, c)
             }
         )
-        ContactSeeder.reset(to: 0)
-        PhotoSeeder.reset(to: 0)
+//        ContactSeeder.reset(to: 0)
         locMgr.stopUpdatingLocation()
     }
 
     static func kickOff() {
         DispatchQueue.global(qos: .userInitiated).async {
-            benchSize(dataSize)
-            print("Overhead benchmark finished – see CSV at \(csvURL.path())")
+            for s in sizes {
+                benchSize(s)
+                if let out = currentCsvURL {
+                    print(
+                        "Overhead benchmark finished – see CSV at \(out.path())"
+                    )
+                }
+            }
+            // Cleanup photos once after all sizes
+//            PhotoSeeder.reset(to: 0)
         }
     }
 }
