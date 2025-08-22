@@ -1,0 +1,12 @@
+baseline,query,size,mean_ms,std_ms
+preload,Contacts - Full,100000,245.49061659999998,1.2952331348927215
+preload,Contacts - Projection,100000,143.0719959,1.3140432089203542
+preload,Contacts - Predicate,100000,3.9493083999999996,0.22549547585537053
+preload,Photos - Full,100000,432613.4027832,112051.9015598095
+preload,Photos - Projection,100000,1669090.915496,1220570.8367403678
+preload,Photos - Predicate,100000,71.7829374,15.335814573204013
+preload,Photos - Order By / Limit,100000,76.52654999999999,5.85970761232543
+preload,Location - Order By / Limit,100000,0.14154150000000001,0.05431755407462674
+preload,preload_contacts_ms,0,3402.410875,0
+preload,preload_photos_ms,0,130038.083333,0
+preload,preload_location_ms,0,6.831,0

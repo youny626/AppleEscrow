@@ -148,7 +148,10 @@ private enum ContactSeeder {
             let extras = uniqueIds.dropFirst()
             let req = CNSaveRequest()
             extras.forEach { id in
-                if let c = try? store.unifiedContact(withIdentifier: id, keysToFetch: []) {
+                if let c = try? store.unifiedContact(
+                    withIdentifier: id,
+                    keysToFetch: []
+                ) {
                     let mut = c.mutableCopy() as! CNMutableContact
                     req.delete(mut)
                 }
@@ -157,7 +160,7 @@ private enum ContactSeeder {
             uniqueIds = Array(uniqueIds.prefix(1))
         }
 
-        let desiredEscrow = max(target - 1, 0) // reserve one for uniqueName
+        let desiredEscrow = max(target - 1, 0)  // reserve one for uniqueName
         if escrowIds.count > desiredEscrow {
             let toRemove = escrowIds.count - desiredEscrow
             var i = 0
@@ -167,7 +170,10 @@ private enum ContactSeeder {
                 let slice = escrowIds[i..<end]
                 let req = CNSaveRequest()
                 slice.forEach { id in
-                    if let c = try? store.unifiedContact(withIdentifier: id, keysToFetch: []) {
+                    if let c = try? store.unifiedContact(
+                        withIdentifier: id,
+                        keysToFetch: []
+                    ) {
                         let mut = c.mutableCopy() as! CNMutableContact
                         req.delete(mut)
                     }
@@ -354,7 +360,9 @@ struct BenchRunner {
     private static let sizes: [Int] = {
         if let s = ProcessInfo.processInfo.environment["RUN_SIZE"],
             let n = Int(s)
-        { return [n] }
+        {
+            return [n]
+        }
         return [100_000]
     }()
 

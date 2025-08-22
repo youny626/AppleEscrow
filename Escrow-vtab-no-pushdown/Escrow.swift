@@ -202,4 +202,10 @@ public final class Escrow {
         }
         return compute(rows)
     }
+    
+    public func runWithTiming<T>(access sql: String, compute: ([Row]) -> T) -> (
+        T, Double, Double
+    ) {
+        fatalError("Not implemented")
+    }
 }

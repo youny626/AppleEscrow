@@ -58,7 +58,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "BASELINE"
-            value = "vtab"
+            value = "preload"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
@@ -73,7 +73,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "RUN_SIZE"
-            value = "100000"
+            value = "10000"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

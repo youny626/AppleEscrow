@@ -1,0 +1,9 @@
+baseline,query,size,mean_ms,std_ms
+nopushdown,Contacts - Full,100000,2225.3788708,151.74744051469455
+nopushdown,Contacts - Projection,100000,10208.9192625,5522.867127669666
+nopushdown,Contacts - Predicate,100000,12333.9738877,596.7396570978516
+nopushdown,Photos - Full,100000,736657.0423749001,338085.7835700314
+nopushdown,Photos - Projection,100000,669493.0712164,506607.8108386487
+nopushdown,Photos - Predicate,100000,537627.9916335,250409.8690843295
+nopushdown,Photos - Order By / Limit,100000,166370.1102583,21419.941102166842
+nopushdown,Location - Order By / Limit,100000,0.0851626,0.003672222547722291
