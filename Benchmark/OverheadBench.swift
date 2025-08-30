@@ -635,7 +635,7 @@ struct OverheadBenchRunner {
                 return (a, c)
             }
         )
-        //        ContactSeeder.reset(to: 0)
+        ContactSeeder.reset(to: 0)
         locMgr.stopUpdatingLocation()
     }
 
@@ -650,7 +650,7 @@ struct OverheadBenchRunner {
                 }
             }
             // Cleanup photos once after all sizes
-            //            PhotoSeeder.reset(to: 0)
+            PhotoSeeder.reset(to: 0)
         }
     }
 }
