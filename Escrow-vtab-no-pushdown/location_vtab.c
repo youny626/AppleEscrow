@@ -2,7 +2,7 @@
 //  location_vtab.c
 //  EscrowApp
 //
-//  Created by Zhiru Zhu on 5/29/25.
+//  Created by XXX on 5/29/25.
 //
 
 #include "sqlite3ext.h"

@@ -2,7 +2,7 @@
 //  LocationBridge.swift
 //  EscrowApp
 //
-//  Created by Zhiru Zhu on 5/29/25.
+//  Created by XXX on 5/29/25.
 //
 
 import CoreLocation

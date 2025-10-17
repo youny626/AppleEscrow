@@ -2,7 +2,7 @@
 //  EscrowAppUITestsLaunchTests.swift
 //  EscrowAppUITests
 //
-//  Created by Zhiru Zhu on 5/8/25.
+//  Created by XXX on 5/8/25.
 //
 
 import XCTest

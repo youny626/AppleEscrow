@@ -2,7 +2,7 @@
 //  PhotosBridge.swift
 //  EscrowApp
 //
-//  Created by Zhiru Zhu on 5/23/25.
+//  Created by XXX on 5/23/25.
 //
 
 import Foundation

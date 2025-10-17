@@ -155,8 +155,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				430A3F3F2E1DE09300C0423B /* Escrow-preload-to-sqlite */,
 				432CC6362DCC86430021B981 /* EscrowApp */,
+				432CC65F2DCC87410021B981 /* Escrow */,
 			);
 			name = EscrowApp;
 			packageProductDependencies = (
