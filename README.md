@@ -13,7 +13,7 @@ This repository contains the escrow prototype described in the paper *Enabling P
 
 There are three separate escrow implementations in three folders, `Escrow`, `Escrow-vtab-no-pushdown`, `Escrow-preload-to-sqlite`, corresponding to Virtual Tables with Pushdown, Virtual Tables, and Materialized Tables relational engine implementation described in the paper. Compile the project with only one of the folders.
 
-In the folder `EscrowApp`, the file `MyApp.swift` is the main entrypoint for testing the prototype. It initializes the escrow instance and calls the `run(access(), compute())` function.  There are some examples you can modify and test. 
+In the folder `EscrowApp`, the file `MyApp.swift` is the main entrypoint for testing the prototype. It initializes the escrow instance and calls the `run(access(), compute())` function.  There are some examples in the file that you can modify and test. 
 
 ### Security/Privacy Issues and Ethical Concerns
 
@@ -21,7 +21,7 @@ Testing this prototype requires you to grant access permissions to protected res
 
 ## Environment
 
-To test the prototype, you need a mac device (eg. MacBook) with Xcode installed, and open the project in as an Xcode project. You need to make sure relevant capabilities (`entitlements`) and permissions (`info.plist`) are set in Xcode before you run the app.
+To test the prototype, you need a Mac device (ex. MacBook) with Xcode installed, and open the project as an Xcode project. You need to make sure relevant capabilities (`entitlements`) and permissions (`info.plist`) are set in Xcode before you run the app.
 
 ### Accessibility
 
