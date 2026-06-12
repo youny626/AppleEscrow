@@ -9,15 +9,27 @@ Requested Badge(s):
 
 ## Description
 
-This repository contains the escrow prototype described in the paper *Enabling Personal Dataflow Sovereignty via Bolt-on Data Escrow* and relevant code for evaluation (in the `Benchmark` folder). 
+This repository contains the escrow prototype described in the paper *Enabling Personal Dataflow Sovereignty via Bolt-on Data Escrow* (PETS 2026). 
+
+**BibTeX Citation:**
+```bibtex
+@article{zhu2026enabling,
+  title={Enabling Personal Dataflow Sovereignty via Bolt-on Data Escrow},
+  author={Zhu, Zhiru and Fernandez, Raul Castro},
+  journal={Proceedings on Privacy Enhancing Technologies},
+  year={2026}
+}
+```
 
 There are three separate escrow implementations in three folders, `Escrow`, `Escrow-vtab-no-pushdown`, `Escrow-preload-to-sqlite`, corresponding to Virtual Tables with Pushdown, Virtual Tables, and Materialized Tables relational engine implementation described in the paper. Compile the project with only one of the folders.
 
 In the folder `EscrowApp`, the file `MyApp.swift` is the main entrypoint for testing the prototype. It initializes the escrow instance and calls the `run(access(), compute())` function.  There are some examples in the file that you can modify and test. 
 
+The code, results, and plotting scripts used for evaluation in the paper are in the `Benchmark` folder. 
+
 ### Security/Privacy Issues and Ethical Concerns
 
-Testing this prototype requires you to grant access permissions to protected resources on your device, such as photo library, contacts, and location.
+Testing this prototype requires you to grant access permissions to protected resources on your device, such as the photos library, contacts, and location. These permissions allow the escrow to invoke Apple's native data access SDKs to populate the underlying materialized tables or dynamically fetch data for virtual tables, then execute the `access()` function. The raw data never leaves the escrow. The output of the `access()` function is passed into the subsequent `compute()` function in `run()`, and only the output of `compute()` is returned to the app. 
 
 ## Environment
 
@@ -25,7 +37,7 @@ To test the prototype, you need a Mac device (ex. MacBook) with Xcode installed,
 
 ### Accessibility
 
-You may access the artifact using `git clone https://github.com/youny626/AppleEscrow.git`.
+You may access the artifact using <https://github.com/youny626/AppleEscrow/tree/main>.
 
 ## Notes on Reusability
 
